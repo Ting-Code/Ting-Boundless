@@ -624,7 +624,7 @@ RabbitMQ
 S3-compatible storage
 ```
 
-V1 deployment can use one PostgreSQL instance with multiple databases or schemas:
+V1 PostgreSQL layout can be one instance with multiple databases or schemas:
 
 ```text
 logto_db
@@ -632,7 +632,85 @@ app_db
 audit_db
 ```
 
-Later stages can move to managed RDS, managed Redis, RabbitMQ cluster, and managed object storage.
+### Deployment Topology (Stateful vs Stateless)
+
+**Do not run databases in the same deployment unit as application services in
+production.** Stateful components have a different lifecycle: backups, upgrades,
+scaling, and failure modes differ from stateless HTTP workers.
+
+```text
+┌─────────────────────────────────────────┐
+│  Stateful layer (separate lifecycle)     │
+│  PostgreSQL · Redis · RabbitMQ · OSS     │
+│  Local dev: deploy/docker-compose.infra  │
+│  Production: managed RDS / cloud services│
+└─────────────────────────────────────────┘
+                    ↑ TCP only (env-driven)
+┌─────────────────────────────────────────┐
+│  Stateless layer (safe to redeploy)      │
+│  gateway · services · nginx · logto      │
+│  deploy/docker-compose.yml               │
+└─────────────────────────────────────────┘
+```
+
+Repository layout:
+
+```text
+deploy/docker-compose.infra.yml   Postgres, Redis, RabbitMQ, MinIO (local dev only)
+deploy/docker-compose.yml         Application services (all environments)
+```
+
+Local development:
+
+```text
+docker compose -f deploy/docker-compose.infra.yml -f deploy/docker-compose.yml up -d
+# or: make up
+```
+
+Production / staging:
+
+```text
+managed PostgreSQL / Redis / RabbitMQ / OSS
+docker compose -f deploy/docker-compose.yml up -d
+# POSTGRES_HOST, REDIS_ADDR, etc. point to managed endpoints in .env
+```
+
+Host-native development (preferred for local debugging):
+
+```text
+install PostgreSQL / Redis / RabbitMQ on the host
+psql -U postgres -f deploy/postgres/setup-local.sql
+cp .env.example .env
+go run ./services/user-service   # connects to localhost, probes /readyz
+```
+
+Optional Docker infra (when native install is not desired):
+
+```text
+make up-infra                              # data stores in Docker
+POSTGRES_HOST=localhost go run ./services/...   # services on the host
+```
+
+Application services connect via environment variables (`POSTGRES_HOST`,
+`POSTGRES_PORT`, `REDIS_ADDR`, `RABBITMQ_URL`, `S3_ENDPOINT`). They must not
+assume co-location with data stores.
+
+Shared connection helpers:
+
+```text
+pkg/db       PostgreSQL (pgx pool, /readyz probe)
+pkg/cache    Redis
+pkg/mq       RabbitMQ
+pkg/storage  S3-compatible endpoint (TCP probe)
+pkg/config   LoadEnvFile(), IsPlaceholder() for cloud stubs
+```
+
+Local dev defaults target `localhost`. Production uses managed endpoints; until
+real cloud values are configured, placeholder hosts (e.g. `rm-xxx`,
+`*-placeholder`) skip connection and fail `/readyz` with "not configured".
+
+Later stages can move fully to managed RDS, managed Redis, RabbitMQ cluster, and
+managed object storage without changing service code.
 
 ### Schema Migrations
 
@@ -662,13 +740,13 @@ Deployment can remain manual at first, but build and image publishing should be 
 
 ```text
 single ECS
-Docker Compose
+Docker Compose (apps separate from data infra)
 Nginx
 Go Gateway/BFF
 Logto
 auth-service (IdP integration)
 Go core services
-PostgreSQL
+PostgreSQL (managed or local infra compose for dev)
 Redis
 RabbitMQ
 S3/OSS
@@ -720,6 +798,7 @@ platform-contracts for cross-language consistency.
 OpenTelemetry for observability.
 CloudEvents + Audit Service for auditability.
 PostgreSQL/Redis/RabbitMQ/S3 as the infrastructure base.
-Docker Compose on one ECS first, K8s later.
+Docker Compose for stateless apps; data stores managed or in deploy/docker-compose.infra.yml for local dev.
+Single ECS first, K8s later.
 ```
 

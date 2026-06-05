@@ -5,9 +5,12 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 
+	"github.com/ting-boundless/boundless/pkg/config"
+	"github.com/ting-boundless/boundless/pkg/db"
 	"github.com/ting-boundless/boundless/pkg/httpx"
 	"github.com/ting-boundless/boundless/pkg/identity"
 	"github.com/ting-boundless/boundless/pkg/logger"
@@ -16,11 +19,18 @@ import (
 const serviceName = "user-service"
 
 func main() {
+	config.LoadEnvFile()
 	log := logger.New(serviceName, httpx.Env("LOG_LEVEL", "info"))
 	slog.SetDefault(log)
 
+	ctx := context.Background()
+	pg := db.Connect(ctx, log, "")
+	if pg.DB != nil {
+		defer pg.DB.Close()
+	}
+
 	health := httpx.NewHealth()
-	// TODO: health.Register(httpx.Check{Name: "postgres", Probe: db.Ping})
+	db.RegisterHealth(health, "postgres", pg.Probe)
 
 	mux := http.NewServeMux()
 	health.Handler(mux)
@@ -32,7 +42,7 @@ func main() {
 		httpx.AccessLog(log),
 	)
 
-	addr := httpx.Env("HTTP_ADDR", ":8080")
+	addr := httpx.Env("HTTP_ADDR", ":8081")
 	if err := httpx.New(addr, h, log).Run(); err != nil {
 		log.Error("server error", slog.Any("error", err))
 	}

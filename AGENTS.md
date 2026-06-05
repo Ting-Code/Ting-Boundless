@@ -25,7 +25,7 @@ Entry point for AI coding agents working in this repository.
 platform-contracts/  cross-language source of truth (proto + buf, JSON schemas)
 pkg/                 shared Go libraries (thin SDK over the contracts)
 services/            deployable services (one folder each)
-deploy/              docker-compose, nginx, otel collector
+deploy/              docker-compose (apps + infra split), nginx, otel collector
 docs/                architecture docs
 .cursor/             rules + skills
 ```

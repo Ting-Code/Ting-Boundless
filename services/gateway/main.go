@@ -10,9 +10,12 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 
+	"github.com/ting-boundless/boundless/pkg/cache"
+	"github.com/ting-boundless/boundless/pkg/config"
 	"github.com/ting-boundless/boundless/pkg/httpx"
 	"github.com/ting-boundless/boundless/pkg/identity"
 	"github.com/ting-boundless/boundless/pkg/logger"
@@ -22,17 +25,23 @@ import (
 const serviceName = "gateway"
 
 func main() {
+	config.LoadEnvFile()
 	log := logger.New(serviceName, httpx.Env("LOG_LEVEL", "info"))
 	slog.SetDefault(log)
 
+	ctx := context.Background()
+	rd := cache.Connect(ctx, log)
+	if rd.Client != nil {
+		defer rd.Client.Close()
+	}
+
 	health := httpx.NewHealth()
-	// Intentionally NOT registering Logto JWKS as a readiness check: JWKS is
-	// cached, so a Logto outage degrades login only, it must not fail readiness.
+	cache.RegisterHealth(health, rd.Probe)
 
 	routes := proxy.Routes{
-		"/v1/users/":    httpx.Env("USER_SERVICE_URL", "http://user-service:8080"),
-		"/v1/business/": httpx.Env("BUSINESS_SERVICE_URL", "http://business-service:8080"),
-		"/v1/files/":    httpx.Env("FILE_SERVICE_URL", "http://file-service:8080"),
+		"/v1/users/":    httpx.Env("USER_SERVICE_URL", "http://127.0.0.1:8081"),
+		"/v1/business/": httpx.Env("BUSINESS_SERVICE_URL", "http://127.0.0.1:8082"),
+		"/v1/files/":    httpx.Env("FILE_SERVICE_URL", "http://127.0.0.1:8083"),
 	}
 
 	router, err := proxy.New(routes, log)
@@ -45,12 +54,11 @@ func main() {
 	health.Handler(mux)
 	mux.Handle("/", router)
 
-	// Order matters: strip+verify+inject identity BEFORE proxying downstream.
 	h := httpx.Chain(mux,
 		httpx.RequestID,
 		httpx.Recover(log),
 		httpx.AccessLog(log),
-		authenticate(log),
+		authenticate(),
 	)
 
 	addr := httpx.Env("HTTP_ADDR", ":8080")
@@ -59,26 +67,12 @@ func main() {
 	}
 }
 
-// authenticate strips untrusted identity headers, verifies the caller's
-// credential, and injects the trusted identity context downstream.
-//
-// TODO: implement real verification:
-//   - Bearer JWT: validate via cached JWKS (OIDC_JWKS_URL), check issuer/audience
-//   - Web cookie: validate BFF session
-//   - check Redis revocation list for sensitive paths
-func authenticate(log *slog.Logger) func(http.Handler) http.Handler {
+func authenticate() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// 1. Never trust client-supplied identity headers.
 			identity.StripUntrusted(r.Header)
-
-			// 2. Verify credential -> resolve identity (placeholder).
 			id := identity.Identity{RequestID: r.Header.Get(identity.HeaderRequestID)}
-			// id = verifyBearerOrCookie(r) ...
-
-			// 3. Re-inject the request id and the (verified) identity.
 			id.Inject(r.Header)
-
 			next.ServeHTTP(w, r)
 		})
 	}

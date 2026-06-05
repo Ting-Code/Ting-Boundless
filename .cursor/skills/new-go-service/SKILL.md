@@ -15,7 +15,7 @@ baseline in `docs/AI_CONTEXT.md` and `.cursor/rules/`.
 - [ ] 2. Create services/<name>/main.go from the template below
 - [ ] 3. Put service-private code in services/<name>/internal/
 - [ ] 4. Add services/<name>/README.md (responsibilities, endpoints, deps)
-- [ ] 5. Register the service in deploy/docker-compose.yml (SERVICE build arg)
+- [ ] 5. Register the service in `deploy/docker-compose.yml` (SERVICE build arg)
 - [ ] 6. If it owns data: add a database + golang-migrate migrations + outbox
 - [ ] 7. If the Gateway should route to it: add a prefix in services/gateway/main.go
 - [ ] 8. Run: make build && make vet
@@ -37,9 +37,12 @@ baseline in `docs/AI_CONTEXT.md` and `.cursor/rules/`.
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 
+	"github.com/ting-boundless/boundless/pkg/config"
+	"github.com/ting-boundless/boundless/pkg/db"
 	"github.com/ting-boundless/boundless/pkg/httpx"
 	"github.com/ting-boundless/boundless/pkg/identity"
 	"github.com/ting-boundless/boundless/pkg/logger"
@@ -48,11 +51,18 @@ import (
 const serviceName = "ORDER-service" // replace
 
 func main() {
+	config.LoadEnvFile()
 	log := logger.New(serviceName, httpx.Env("LOG_LEVEL", "info"))
 	slog.SetDefault(log)
 
+	ctx := context.Background()
+	pg := db.Connect(ctx, log, "")
+	if pg.DB != nil {
+		defer pg.DB.Close()
+	}
+
 	health := httpx.NewHealth()
-	// health.Register(httpx.Check{Name: "postgres", Probe: db.Ping})
+	db.RegisterHealth(health, "postgres", pg.Probe)
 
 	mux := http.NewServeMux()
 	health.Handler(mux)
@@ -83,6 +93,8 @@ func handleList(w http.ResponseWriter, r *http.Request) {
 
 ## docker-compose entry
 
+Add to `deploy/docker-compose.yml` (application services only — not `docker-compose.infra.yml`):
+
 ```yaml
   order-service:
     <<: *service-build
@@ -90,8 +102,10 @@ func handleList(w http.ResponseWriter, r *http.Request) {
       context: ..
       dockerfile: deploy/Dockerfile
       args: { SERVICE: order-service }
-    depends_on: [postgres]
 ```
+
+Services connect to PostgreSQL/Redis via env (`POSTGRES_HOST`, `REDIS_ADDR`), not via
+`depends_on` on data stores. Readiness probes (`/readyz`) verify connectivity.
 
 ## Verify
 

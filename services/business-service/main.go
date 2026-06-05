@@ -5,9 +5,13 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 
+	"github.com/ting-boundless/boundless/pkg/cache"
+	"github.com/ting-boundless/boundless/pkg/config"
+	"github.com/ting-boundless/boundless/pkg/db"
 	"github.com/ting-boundless/boundless/pkg/httpx"
 	"github.com/ting-boundless/boundless/pkg/identity"
 	"github.com/ting-boundless/boundless/pkg/logger"
@@ -16,10 +20,23 @@ import (
 const serviceName = "business-service"
 
 func main() {
+	config.LoadEnvFile()
 	log := logger.New(serviceName, httpx.Env("LOG_LEVEL", "info"))
 	slog.SetDefault(log)
 
+	ctx := context.Background()
+	pg := db.Connect(ctx, log, "")
+	if pg.DB != nil {
+		defer pg.DB.Close()
+	}
+	rd := cache.Connect(ctx, log)
+	if rd.Client != nil {
+		defer rd.Client.Close()
+	}
+
 	health := httpx.NewHealth()
+	db.RegisterHealth(health, "postgres", pg.Probe)
+	cache.RegisterHealth(health, rd.Probe)
 
 	mux := http.NewServeMux()
 	health.Handler(mux)
@@ -31,7 +48,7 @@ func main() {
 		httpx.AccessLog(log),
 	)
 
-	addr := httpx.Env("HTTP_ADDR", ":8080")
+	addr := httpx.Env("HTTP_ADDR", ":8082")
 	if err := httpx.New(addr, h, log).Run(); err != nil {
 		log.Error("server error", slog.Any("error", err))
 	}
@@ -39,6 +56,5 @@ func main() {
 
 func handlePing(w http.ResponseWriter, r *http.Request) {
 	id, _ := identity.FromContext(r.Context())
-	// Example: enforce tenant isolation here before touching data.
 	httpx.JSON(w, http.StatusOK, map[string]any{"pong": true, "tenant_id": id.TenantID})
 }

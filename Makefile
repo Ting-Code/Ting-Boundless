@@ -37,13 +37,33 @@ proto: ## Lint + generate code from platform-contracts (requires buf)
 proto-breaking: ## Check breaking proto changes against main (requires buf)
 	cd platform-contracts && buf breaking --against '.git#branch=main'
 
+COMPOSE_INFRA := docker compose -f deploy/docker-compose.infra.yml
+COMPOSE_APPS  := docker compose -f deploy/docker-compose.yml
+COMPOSE_ALL   := docker compose -f deploy/docker-compose.infra.yml -f deploy/docker-compose.yml
+
+.PHONY: up-infra
+up-infra: ## Start data infra only (Postgres, Redis, RabbitMQ, MinIO)
+	$(COMPOSE_INFRA) up -d
+
+.PHONY: up-apps
+up-apps: ## Start application services only (use managed RDS/Redis in .env for prod)
+	$(COMPOSE_APPS) up -d --build
+
 .PHONY: up
-up: ## Start the V1 stack (requires docker compose)
-	docker compose -f deploy/docker-compose.yml up -d --build
+up: ## Start infra + apps (local dev)
+	$(COMPOSE_ALL) up -d --build
+
+.PHONY: down-apps
+down-apps: ## Stop application services
+	$(COMPOSE_APPS) down
+
+.PHONY: down-infra
+down-infra: ## Stop data infra (keeps volumes unless -v)
+	$(COMPOSE_INFRA) down
 
 .PHONY: down
-down: ## Stop the V1 stack
-	docker compose -f deploy/docker-compose.yml down
+down: ## Stop infra + apps
+	$(COMPOSE_ALL) down
 
 .PHONY: ci
 ci: tidy vet build test ## Local CI bundle

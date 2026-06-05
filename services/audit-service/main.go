@@ -6,10 +6,13 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 
 	"github.com/ting-boundless/boundless/pkg/audit"
+	"github.com/ting-boundless/boundless/pkg/config"
+	"github.com/ting-boundless/boundless/pkg/db"
 	"github.com/ting-boundless/boundless/pkg/httpx"
 	"github.com/ting-boundless/boundless/pkg/logger"
 )
@@ -17,11 +20,19 @@ import (
 const serviceName = "audit-service"
 
 func main() {
+	config.LoadEnvFile()
 	log := logger.New(serviceName, httpx.Env("LOG_LEVEL", "info"))
 	slog.SetDefault(log)
 
+	ctx := context.Background()
+	auditDB := httpx.Env("AUDIT_DB", "audit_db")
+	pg := db.Connect(ctx, log, auditDB)
+	if pg.DB != nil {
+		defer pg.DB.Close()
+	}
+
 	health := httpx.NewHealth()
-	// TODO: health.Register(httpx.Check{Name: "audit_db", Probe: db.Ping})
+	db.RegisterHealth(health, "audit_db", pg.Probe)
 
 	mux := http.NewServeMux()
 	health.Handler(mux)
@@ -33,7 +44,7 @@ func main() {
 		httpx.AccessLog(log),
 	)
 
-	addr := httpx.Env("HTTP_ADDR", ":8080")
+	addr := httpx.Env("HTTP_ADDR", ":8085")
 	if err := httpx.New(addr, h, log).Run(); err != nil {
 		log.Error("server error", slog.Any("error", err))
 	}
@@ -42,8 +53,6 @@ func main() {
 func handleIngest(log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var _ audit.Event
-		// TODO: decode CloudEvents-style event, validate against schema,
-		// idempotency by event id, INSERT append-only into audit_db.
 		logger.From(r.Context()).Info("audit event received")
 		httpx.JSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
 	}

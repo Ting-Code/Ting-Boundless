@@ -3,22 +3,35 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 
+	"github.com/ting-boundless/boundless/pkg/config"
+	"github.com/ting-boundless/boundless/pkg/db"
 	"github.com/ting-boundless/boundless/pkg/httpx"
 	"github.com/ting-boundless/boundless/pkg/identity"
 	"github.com/ting-boundless/boundless/pkg/logger"
+	"github.com/ting-boundless/boundless/pkg/storage"
 )
 
 const serviceName = "file-service"
 
 func main() {
+	config.LoadEnvFile()
 	log := logger.New(serviceName, httpx.Env("LOG_LEVEL", "info"))
 	slog.SetDefault(log)
 
+	ctx := context.Background()
+	pg := db.Connect(ctx, log, "")
+	if pg.DB != nil {
+		defer pg.DB.Close()
+	}
+	s3 := storage.Connect(ctx, log)
+
 	health := httpx.NewHealth()
-	// TODO: health.Register(httpx.Check{Name: "s3", Probe: store.Ping})
+	db.RegisterHealth(health, "postgres", pg.Probe)
+	storage.RegisterHealth(health, s3.Probe)
 
 	mux := http.NewServeMux()
 	health.Handler(mux)
@@ -30,13 +43,12 @@ func main() {
 		httpx.AccessLog(log),
 	)
 
-	addr := httpx.Env("HTTP_ADDR", ":8080")
+	addr := httpx.Env("HTTP_ADDR", ":8083")
 	if err := httpx.New(addr, h, log).Run(); err != nil {
 		log.Error("server error", slog.Any("error", err))
 	}
 }
 
 func handleUpload(w http.ResponseWriter, _ *http.Request) {
-	// TODO: stream to S3-compatible storage, record metadata in app_db.
 	httpx.JSON(w, http.StatusNotImplemented, map[string]string{"code": "not_implemented"})
 }

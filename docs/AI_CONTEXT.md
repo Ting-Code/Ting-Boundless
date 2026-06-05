@@ -258,6 +258,23 @@ app_db
 audit_db
 ```
 
+**Deployment rule:** stateful data stores are not co-deployed with application
+services in production. Use managed RDS/Redis/MQ/OSS, or for local dev install
+PostgreSQL/Redis/RabbitMQ natively on the host (preferred). Optional Docker infra:
+`deploy/docker-compose.infra.yml`. Application services live in
+`deploy/docker-compose.yml` and connect via env (`POSTGRES_HOST`, `REDIS_ADDR`, …).
+
+Connection libraries live in `pkg/db`, `pkg/cache`, `pkg/mq`, `pkg/storage`.
+Services load `.env` via `config.LoadEnvFile()` for local dev; production injects
+env at deploy time. Cloud placeholder values (e.g. `rm-xxx`, `*-placeholder`) skip
+real connections until replaced.
+
+```text
+Local dev:  install PG/Redis locally → cp .env.example .env → go run ./services/...
+Optional:   make up-infra (Docker infra) + POSTGRES_HOST=localhost
+Production: make up-apps + replace cloud placeholders in .env
+```
+
 ## Required Service Behavior
 
 Every service must expose:
@@ -550,13 +567,13 @@ V1:
 
 ```text
 single ECS
-Docker Compose
+Docker Compose (apps separate from data infra)
 Nginx
 Go Gateway/BFF
 Logto
 auth-service (IdP integration)
 Go core services
-PostgreSQL
+PostgreSQL (managed or local infra compose for dev)
 Redis
 RabbitMQ
 S3/OSS
