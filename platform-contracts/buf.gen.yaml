@@ -1,0 +1,14 @@
+version: v2
+# Generated code is written to gen/ (gitignored). Regenerate with: make proto
+managed:
+  enabled: true
+plugins:
+  - remote: buf.build/protocolbuffers/go
+    out: gen/go
+    opt: paths=source_relative
+  - remote: buf.build/grpc/go
+    out: gen/go
+    opt: paths=source_relative
+  # Add per-language outputs as services in other languages appear:
+  # - remote: buf.build/protocolbuffers/python
+  #   out: gen/python

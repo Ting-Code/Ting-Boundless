@@ -1,0 +1,20 @@
+---
+description: Go service conventions for Ting Boundless
+globs: services/**/*.go,pkg/**/*.go
+alwaysApply: false
+---
+
+# Go Service Conventions
+
+- One module (`github.com/ting-boundless/boundless`). Service entrypoints live in
+  `services/<name>/main.go`; service-private code in `services/<name>/internal/`.
+- Reuse `pkg/`: `logger`, `identity`, `errs`, `httpx`, `audit`. Don't reinvent.
+- Every HTTP service:
+  - builds the logger with `logger.New(serviceName, env)`
+  - registers `/healthz` + `/readyz` via `httpx.Health`
+  - wraps handlers with `httpx.Chain(mux, httpx.RequestID, httpx.Recover, httpx.AccessLog, ...)`
+  - returns errors via `errs.Write` (unified envelope), never ad-hoc JSON errors
+- `/readyz` probes real dependencies; `/healthz` is liveness only.
+- Config from env via `httpx.Env`. No secrets in code.
+- Graceful shutdown is handled by `httpx.Server.Run` — use it.
+- Keep external dependencies minimal; prefer the standard library.

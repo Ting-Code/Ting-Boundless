@@ -1,0 +1,21 @@
+---
+description: Observability and logging rules (OpenTelemetry + ECS)
+globs: services/**/*.go,pkg/**/*.go
+alwaysApply: false
+---
+
+# Observability & Logging
+
+- Log **JSON to stdout** only. Never write plain-text or file logs.
+- Use `pkg/logger` (ECS-style fields). Get the request logger from context:
+
+```go
+logger.From(ctx).Info("user_created", slog.String("user_id", id))
+```
+
+- Always include `request_id` (and `trace_id` when available) — `httpx.AccessLog`
+  adds `request_id` automatically.
+- Propagate `traceparent` (W3C Trace Context) on every outbound call.
+- Expose `/metrics`; follow `platform-contracts/docs/metrics.md` naming. Keep
+  label cardinality bounded (no raw ids in labels).
+- Instrument with the OpenTelemetry SDK; export OTLP to the collector.

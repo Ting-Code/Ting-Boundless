@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package ting.common.v1;
+
+option go_package = "github.com/ting-boundless/boundless/gen/go/ting/common/v1;commonv1";
+
+// Error is the unified error model. Mirror of
+// platform-contracts/schemas/error-response.schema.json and pkg/errs.
+message Error {
+  // Stable, machine-readable code, e.g. "user.not_found".
+  string code = 1;
+  // Human-readable, client-safe message.
+  string message = 2;
+  // Correlation id for the request that produced this error.
+  string request_id = 3;
+}
+
+// ErrorResponse is the wire envelope: {"error": {...}}.
+message ErrorResponse {
+  Error error = 1;
+}

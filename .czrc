@@ -1,0 +1,46 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Zhengqbbb/cz-git/main/docs/public/schema/cz-git.json",
+  "path": "cz-git",
+  "useEmoji": true,
+  "emojiAlign": "left",
+  "allowCustomScopes": true,
+  "allowEmptyScopes": false,
+  "types": [
+    { "value": "feat", "name": "✨ feat:     新功能", "emoji": "✨" },
+    { "value": "fix", "name": "🐛 fix:      修复 Bug", "emoji": "🐛" },
+    { "value": "docs", "name": "📝 docs:     仅文档变更", "emoji": "📝" },
+    { "value": "style", "name": "💄 style:    代码格式（不影响逻辑）", "emoji": "💄" },
+    { "value": "refactor", "name": "♻️  refactor: 重构（非新功能、非修 Bug）", "emoji": "♻️" },
+    { "value": "perf", "name": "⚡ perf:     性能优化", "emoji": "⚡" },
+    { "value": "test", "name": "✅ test:     测试相关", "emoji": "✅" },
+    { "value": "build", "name": "📦 build:    构建系统或依赖变更", "emoji": "📦" },
+    { "value": "ci", "name": "👷 ci:       CI/CD 配置或脚本", "emoji": "👷" },
+    { "value": "chore", "name": "🔧 chore:    杂项（不改业务代码/测试）", "emoji": "🔧" },
+    { "value": "revert", "name": "⏪ revert:   回滚某次提交", "emoji": "⏪" }
+  ],
+  "scopes": [
+    { "value": "gateway", "name": "gateway:              Go 网关 / BFF" },
+    { "value": "auth-service", "name": "auth-service:         IdP 集成 / 登录认证" },
+    { "value": "user-service", "name": "user-service:         用户域服务" },
+    { "value": "business-service", "name": "business-service:     核心业务服务" },
+    { "value": "file-service", "name": "file-service:         文件上传下载" },
+    { "value": "audit-service", "name": "audit-service:        审计事件入库" },
+    { "value": "worker", "name": "worker:               异步任务消费者" },
+    { "value": "platform-contracts", "name": "platform-contracts:   跨语言契约（proto/buf/schema）" },
+    { "value": "pkg", "name": "pkg:                  Go 公共库" },
+    { "value": "deploy", "name": "deploy:               Docker / Nginx / Compose" },
+    { "value": "infra", "name": "infra:                基础设施（PG/Redis/MQ/OSS）" },
+    { "value": "docs", "name": "docs:                 架构与 AI 文档" },
+    { "value": "ci", "name": "ci:                   CI/CD 流水线" }
+  ],
+  "messages": {
+    "type": "选择提交类型：",
+    "scope": "选择影响范围（scope）：",
+    "customScope": "自定义 scope：",
+    "subject": "简短描述（必填）：",
+    "body": "详细说明（可选，换行用 | 分隔）：",
+    "breaking": "破坏性变更说明（可选）：",
+    "footer": "关联 Issue（可选，如 Closes #123）：",
+    "confirmCommit": "确认提交以上内容？"
+  }
+}

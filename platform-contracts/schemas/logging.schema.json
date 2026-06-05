@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ting-boundless/schemas/logging.schema.json",
+  "title": "LogLine",
+  "description": "ECS-style structured log line. Every service logs JSON to stdout with these fields. Mirror of pkg/logger.",
+  "type": "object",
+  "properties": {
+    "@timestamp": { "type": "string", "format": "date-time" },
+    "log.level": { "type": "string", "enum": ["debug", "info", "warn", "error"] },
+    "message": { "type": "string" },
+    "service.name": { "type": "string" },
+    "request_id": { "type": "string" },
+    "trace_id": { "type": "string", "description": "From traceparent / OpenTelemetry" }
+  },
+  "required": ["@timestamp", "log.level", "message", "service.name"],
+  "additionalProperties": true
+}

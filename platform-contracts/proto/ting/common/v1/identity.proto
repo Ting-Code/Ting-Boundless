@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package ting.common.v1;
+
+option go_package = "github.com/ting-boundless/boundless/gen/go/ting/common/v1;commonv1";
+
+// IdentityContext is the trusted actor context the Gateway injects and services
+// consume. Mirror of platform-contracts/schemas/identity-context.schema.json and
+// pkg/identity. Header mapping:
+//   request_id -> X-Request-Id
+//   user_id    -> X-User-Id
+//   tenant_id  -> X-Tenant-Id
+//   roles      -> X-Roles (comma-separated)
+//   scopes     -> X-Scopes (comma-separated)
+//   subject    -> X-Auth-Subject
+message IdentityContext {
+  string request_id = 1;
+  string user_id = 2;
+  string tenant_id = 3;
+  repeated string roles = 4;
+  repeated string scopes = 5;
+  string subject = 6;
+}

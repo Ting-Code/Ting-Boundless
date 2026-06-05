@@ -1,0 +1,27 @@
+---
+description: Audit event emission rules
+globs: services/**/*.go
+alwaysApply: false
+---
+
+# Audit Events
+
+Audit is separate from logs. Use `pkg/audit` (CloudEvents-style); keep in sync
+with `platform-contracts/schemas/audit-event.schema.json`.
+
+## Delivery (by source)
+
+- **Domain events** (tied to a business write, e.g. `resource.delete`,
+  `payment.refund`): use the **Transactional Outbox** — write the event in the
+  same DB transaction as the business change, dispatch asynchronously.
+  Never do best-effort direct HTTP writes on the hot path.
+- **Gateway entry events** (`api.access.denied`, `api.rate_limited`): async, no
+  outbox (no business transaction).
+- **Identity events** (`user.login.success/failed`, `user.logout`): emitted by
+  `auth-service` (Logto webhook / mini-program code2session), not by services.
+
+## Always
+
+- Set the CloudEvents `source` (service name / `gateway` / `auth-service`).
+- Include `tenant_id` and `actor_user_id` where applicable.
+- Use the event `id` for idempotency.

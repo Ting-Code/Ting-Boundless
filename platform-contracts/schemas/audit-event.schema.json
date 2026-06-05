@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ting-boundless/schemas/audit-event.schema.json",
+  "title": "AuditEvent",
+  "description": "CloudEvents-style audit event. Mirror of pkg/audit and audit.proto.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "description": "Unique event id (idempotency key)" },
+    "source": {
+      "type": "string",
+      "description": "Origin: auth-service (identity), gateway (entry), or a business service name"
+    },
+    "type": { "type": "string", "description": "e.g. user.login.success, resource.delete" },
+    "subject": { "type": "string" },
+    "time": { "type": "string", "format": "date-time" },
+    "tenant_id": { "type": "string" },
+    "actor_user_id": { "type": "string" },
+    "data": { "type": "object", "additionalProperties": true }
+  },
+  "required": ["id", "source", "type", "time"],
+  "additionalProperties": false
+}

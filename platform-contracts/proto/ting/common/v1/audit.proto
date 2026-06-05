@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package ting.common.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ting-boundless/boundless/gen/go/ting/common/v1;commonv1";
+
+// AuditEvent is a CloudEvents-style audit event. Mirror of
+// platform-contracts/schemas/audit-event.schema.json and pkg/audit.
+//
+// source distinguishes origins: "auth-service" (identity events), "gateway"
+// (entry events), or a business service name (domain events).
+message AuditEvent {
+  string id = 1;
+  string source = 2;
+  string type = 3; // e.g. user.login.success, resource.delete
+  string subject = 4;
+  google.protobuf.Timestamp time = 5;
+  string tenant_id = 6;
+  string actor_user_id = 7;
+  google.protobuf.Struct data = 8;
+}

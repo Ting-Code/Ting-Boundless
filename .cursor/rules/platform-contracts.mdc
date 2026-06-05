@@ -1,0 +1,20 @@
+---
+description: Rules for changing cross-language contracts
+globs: platform-contracts/**
+alwaysApply: false
+---
+
+# Platform Contracts
+
+This directory is the cross-language **source of truth**. Change shapes here
+first, then regenerate/adapt SDKs.
+
+- Proto packages are versioned: `ting.<domain>.v1`. External APIs use a `/v1`
+  path prefix.
+- Keep `proto/`, `schemas/*.json`, and the Go mirrors in `pkg/` consistent. If
+  you change one (error model, identity context, audit event), update all.
+- Run `buf lint` and `buf breaking` before committing (`make proto`,
+  `make proto-breaking`). Breaking changes must be intentional and caught in CI.
+- Generated code goes to `gen/` (gitignored); never hand-edit generated files.
+- Prefer additive changes (new fields) over breaking ones. Never reuse field
+  numbers in proto messages.

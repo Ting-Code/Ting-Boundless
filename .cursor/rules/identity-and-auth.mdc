@@ -1,0 +1,37 @@
+---
+description: Identity, auth, and token handling rules
+globs: services/**/*.go
+alwaysApply: false
+---
+
+# Identity & Auth
+
+## In the Gateway
+
+- Strip client-supplied identity headers, THEN inject verified ones:
+
+```go
+identity.StripUntrusted(r.Header)
+id := verify(r)        // Bearer JWT via cached JWKS, or web BFF cookie
+id.Inject(r.Header)
+```
+
+- Do not fail readiness if Logto JWKS is unreachable (JWKS is cached → degrade).
+- Check the Redis revocation list for sensitive operations.
+
+## In business services
+
+- Never parse end-user JWTs. Read identity from context:
+
+```go
+id, ok := identity.FromContext(r.Context())
+```
+
+- Enforce domain authorization (ownership, tenant isolation) locally.
+- Always scope data by `id.TenantID`.
+
+## Service-to-service
+
+- Propagate identity + `traceparent`. The callee trusts headers only from the
+  Gateway or trusted internal services (V1: network isolation + internal token;
+  later: mTLS).

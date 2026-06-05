@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ting-boundless/schemas/identity-context.schema.json",
+  "title": "IdentityContext",
+  "description": "Trusted actor context injected by the Gateway and consumed by services.",
+  "type": "object",
+  "properties": {
+    "request_id": { "type": "string", "description": "Header: X-Request-Id" },
+    "user_id": { "type": "string", "description": "Header: X-User-Id" },
+    "tenant_id": { "type": "string", "description": "Header: X-Tenant-Id" },
+    "roles": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Header: X-Roles (comma-separated on the wire)"
+    },
+    "scopes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Header: X-Scopes (comma-separated on the wire)"
+    },
+    "subject": { "type": "string", "description": "Header: X-Auth-Subject" }
+  },
+  "required": ["request_id"],
+  "additionalProperties": false
+}

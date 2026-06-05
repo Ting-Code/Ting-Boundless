@@ -1,0 +1,27 @@
+---
+description: Core architecture non-negotiables for Ting Boundless
+alwaysApply: true
+---
+
+# Architecture Baseline
+
+Authoritative source: `docs/AI_CONTEXT.md` (read it for full rules).
+
+## Non-negotiables
+
+- **Gateway knows who; services know what.** The Gateway authenticates (who you
+  are); business services authorize domain actions (what you may do). Never put
+  domain authorization in the Gateway.
+- **Services don't parse end-user JWTs.** They trust identity headers injected by
+  the Gateway (`pkg/identity`), and only on internal traffic.
+- **Contracts before SDKs.** Define shared shapes in `platform-contracts/` first;
+  `pkg/` is a thin SDK over them.
+- **Standard tokens only.** Anything the Gateway accepts must be a standard JWT
+  with a known issuer + JWKS. No ad-hoc/custom tokens.
+- **Secrets** never enter source, images, or logs. Config via env (12-Factor).
+- **Don't add** K8s, Service Mesh, Dapr, or Backstage in V1 without approval.
+
+## Layout
+
+`platform-contracts/` (source of truth) · `pkg/` (shared Go libs) ·
+`services/` (deployables) · `deploy/` (compose, nginx, otel) · `docs/`.

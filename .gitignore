@@ -1,0 +1,22 @@
+# Binaries
+/bin/
+*.exe
+*.out
+
+# Env / secrets (never commit)
+.env
+*.local.env
+*.pem
+*.key
+
+# Go
+/vendor/
+*.test
+coverage.out
+
+# Generated code from platform-contracts (regenerate with buf)
+/gen/
+
+# OS / editor
+.DS_Store
+Thumbs.db

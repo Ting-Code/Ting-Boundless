@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ting-boundless/schemas/error-response.schema.json",
+  "title": "ErrorResponse",
+  "description": "Unified error envelope returned by all services. Mirror of pkg/errs.",
+  "type": "object",
+  "properties": {
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "description": "Stable machine-readable code, e.g. user.not_found" },
+        "message": { "type": "string", "description": "Human-readable, client-safe message" },
+        "request_id": { "type": "string", "description": "Correlation id" }
+      },
+      "required": ["code", "message"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["error"],
+  "additionalProperties": false
+}
