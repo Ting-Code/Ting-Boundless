@@ -2,15 +2,24 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ting-boundless/schemas/logging.schema.json",
   "title": "LogLine",
-  "description": "ECS-style structured log line. Every service logs JSON to stdout with these fields. Mirror of pkg/logger.",
+  "description": "ECS-style structured log line. Every service logs JSON to stdout with these fields. Mirror of go/pkg/logger and @ting/logger.",
   "type": "object",
   "properties": {
     "@timestamp": { "type": "string", "format": "date-time" },
     "log.level": { "type": "string", "enum": ["debug", "info", "warn", "error"] },
-    "message": { "type": "string" },
+    "message": { "type": "string", "description": "Stable event name, e.g. http_request, item_created" },
     "service.name": { "type": "string" },
-    "request_id": { "type": "string" },
-    "trace_id": { "type": "string", "description": "From traceparent / OpenTelemetry" }
+    "request_id": { "type": "string", "description": "Gateway-generated correlation id; propagated as X-Request-Id internally" },
+    "trace_id": { "type": "string", "description": "32-hex trace id from W3C traceparent / OpenTelemetry" },
+    "user_id": { "type": "string", "description": "Actor user id when authenticated (from trusted identity headers)" },
+    "tenant_id": { "type": "string", "description": "Tenant scope when present" },
+    "http.request.method": { "type": "string" },
+    "http.response.status_code": { "type": "integer" },
+    "url.path": { "type": "string", "description": "Normalized route template; high-cardinality ids replaced with :id" },
+    "event.duration": { "type": "integer", "description": "Duration in nanoseconds (Go slog) or use duration_ms in TS" },
+    "duration_ms": { "type": "integer", "description": "Request duration in milliseconds (Nest @ting/logger)" },
+    "error.code": { "type": "string" },
+    "error.message": { "type": "string" }
   },
   "required": ["@timestamp", "log.level", "message", "service.name"],
   "additionalProperties": true

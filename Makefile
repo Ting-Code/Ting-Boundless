@@ -1,5 +1,6 @@
 .DEFAULT_GOAL := help
-SERVICES := gateway auth-service user-service business-service file-service audit-service worker
+GO_DIR := go
+SERVICES := gateway auth-service user-service file-service audit-service worker
 
 .PHONY: help
 help: ## Show this help
@@ -7,27 +8,27 @@ help: ## Show this help
 
 .PHONY: tidy
 tidy: ## go mod tidy
-	go mod tidy
+	cd $(GO_DIR) && go mod tidy
 
 .PHONY: build
-build: ## Build all packages
-	go build ./...
+build: ## Build all Go packages
+	cd $(GO_DIR) && go build ./...
 
 .PHONY: vet
 vet: ## go vet
-	go vet ./...
+	cd $(GO_DIR) && go vet ./...
 
 .PHONY: test
-test: ## Run tests
-	go test ./...
+test: ## Run Go tests
+	cd $(GO_DIR) && go test ./...
 
 .PHONY: lint
 lint: ## Run golangci-lint if installed
-	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint run || echo "golangci-lint not installed; skipping"
+	@command -v golangci-lint >/dev/null 2>&1 && cd $(GO_DIR) && golangci-lint run || echo "golangci-lint not installed; skipping"
 
 .PHONY: run-%
-run-%: ## Run a single service, e.g. make run-gateway
-	go run ./services/$*
+run-%: ## Run a single Go service, e.g. make run-gateway
+	cd $(GO_DIR) && go run ./services/$*
 
 .PHONY: proto
 proto: ## Lint + generate code from platform-contracts (requires buf)
@@ -64,6 +65,38 @@ down-infra: ## Stop data infra (keeps volumes unless -v)
 .PHONY: down
 down: ## Stop infra + apps
 	$(COMPOSE_ALL) down
+
+.PHONY: node-install
+node-install: ## pnpm install in node/ monorepo
+	cd node && pnpm install
+
+.PHONY: node-build
+node-build: ## Build logger + api-types + Nest business-service
+	cd node && pnpm --filter @ting/logger build && pnpm --filter @ting/api-types build && pnpm --filter @ting/business-service build
+
+.PHONY: run-business
+run-business: ## Run Nest business-service (:3005)
+	cd node && pnpm --filter @ting/logger build && pnpm --filter @ting/api-types build && pnpm dev:business
+
+.PHONY: run-admin
+run-admin: ## Run Vite admin dev server (:5173, proxies /v1 → Gateway)
+	cd node && pnpm --filter @ting/api-types build && pnpm dev:admin
+
+.PHONY: e2e-admin
+e2e-admin: ## Smoke: Gateway dev cookie -> /v1/business/items (needs Redis + gateway + business)
+	powershell -ExecutionPolicy Bypass -File scripts/e2e-admin-gateway.ps1
+
+.PHONY: migrate
+migrate: ## Run SQL migrations (user-service + audit-service; requires Postgres)
+	cd $(GO_DIR) && go run ./cmd/migrate
+
+.PHONY: dev-jwt
+dev-jwt: ## Print a dev HS256 JWT (optional USER_ID arg)
+	cd $(GO_DIR) && go run ./cmd/dev-jwt $(filter-out $@,$(MAKECMDGOALS))
+
+.PHONY: up-logto
+up-logto: ## Start Logto only (Docker; see docs/LOGTO_SETUP.md for native)
+	docker compose -f deploy/docker-compose.logto.yml up -d
 
 .PHONY: ci
 ci: tidy vet build test ## Local CI bundle

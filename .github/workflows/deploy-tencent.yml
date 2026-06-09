@@ -1,0 +1,106 @@
+name: Deploy Tencent Cloud
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-tencent-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_SERVICES: gateway auth-service user-service file-service audit-service worker
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  build-push:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image tag
+        id: meta
+        run: echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Login TCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.TCR_HOST }}
+          username: ${{ secrets.TCR_USERNAME }}
+          password: ${{ secrets.TCR_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Go services
+        env:
+          PREFIX: ${{ secrets.TCR_IMAGE_PREFIX }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          for svc in ${{ env.GO_SERVICES }}; do
+            docker buildx build \
+              --file deploy/Dockerfile \
+              --build-arg SERVICE="$svc" \
+              --tag "${PREFIX}/${svc}:${TAG}" \
+              --tag "${PREFIX}/${svc}:latest" \
+              --push \
+              .
+          done
+
+      - name: Build and push business-service
+        env:
+          PREFIX: ${{ secrets.TCR_IMAGE_PREFIX }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          docker buildx build \
+            --file deploy/Dockerfile.business \
+            --tag "${PREFIX}/business-service:${TAG}" \
+            --tag "${PREFIX}/business-service:latest" \
+            --push \
+            .
+
+      - name: Build and push nginx (admin static)
+        env:
+          PREFIX: ${{ secrets.TCR_IMAGE_PREFIX }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          docker buildx build \
+            --file deploy/Dockerfile.nginx \
+            --tag "${PREFIX}/nginx:${TAG}" \
+            --tag "${PREFIX}/nginx:latest" \
+            --push \
+            .
+
+  deploy:
+    needs: build-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    env:
+      IMAGE_TAG: ${{ needs.build-push.outputs.image_tag }}
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          envs: IMAGE_TAG
+          script: |
+            set -euo pipefail
+            cd ${{ secrets.DEPLOY_PATH }}
+            git fetch origin main
+            git checkout main
+            git pull --ff-only origin main
+            export TCR_REGISTRY="${{ secrets.TCR_IMAGE_PREFIX }}"
+            export IMAGE_TAG="${IMAGE_TAG}"
+            echo "${{ secrets.TCR_PASSWORD }}" | docker login "${{ secrets.TCR_HOST }}" -u "${{ secrets.TCR_USERNAME }}" --password-stdin
+            bash scripts/deploy-tencent-remote.sh

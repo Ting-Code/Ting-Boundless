@@ -9,14 +9,43 @@
 *.pem
 *.key
 
-# Go
-/vendor/
+# Go (module root: go/)
+go/vendor/
 *.test
 coverage.out
 
 # Generated code from platform-contracts (regenerate with buf)
 /gen/
 
+# Logto OSS (install via scripts/start-logto.ps1 or @logto/cli init)
+deploy/logto/
+deploy/logto-src/
+
+# Node / pnpm monorepo (node/)
+node_modules/
+**/node_modules/
+.pnpm-store/
+node/.pnpm-store/
+node/**/dist/
+node/**/.next/
+node/**/out/
+node/**/.turbo/
+*.tsbuildinfo
+
+# IDE
+.idea/
+*.iml
+.vscode/
+!.vscode/extensions.json
+
+# Deploy artifacts (download via scripts; do not commit)
+deploy/logto.tar.gz
+deploy/*.tar.gz
+deploy/nginx/certs/*.pem
+deploy/nginx/certs/*.key
+!deploy/nginx/certs/.gitkeep
+
 # OS / editor
 .DS_Store
 Thumbs.db
+*~

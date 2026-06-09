@@ -1,23 +1,23 @@
 ---
 name: new-go-service
-description: Scaffold a new Go service in the Ting Boundless monorepo following the platform baseline (health, ECS logging, identity, audit, unified errors, Dockerfile, compose). Use when adding a new backend service, microservice, or "services/<name>" in this repo.
+description: Scaffold a new Go service in the Ting Boundless monorepo following the platform baseline (health, ECS logging, identity, audit, unified errors, Dockerfile, compose). Use when adding a new backend service, microservice, or "go/services/<name>" in this repo.
 ---
 
 # New Go Service
 
-Scaffold a service under `services/<name>/` that conforms to the architecture
+Scaffold a service under `go/services/<name>/` that conforms to the architecture
 baseline in `docs/AI_CONTEXT.md` and `.cursor/rules/`.
 
 ## Workflow
 
 ```
 - [ ] 1. Pick a kebab-case name (e.g. order-service)
-- [ ] 2. Create services/<name>/main.go from the template below
-- [ ] 3. Put service-private code in services/<name>/internal/
-- [ ] 4. Add services/<name>/README.md (responsibilities, endpoints, deps)
+- [ ] 2. Create go/services/<name>/main.go from the template below
+- [ ] 3. Put service-private code in go/services/<name>/internal/
+- [ ] 4. Add go/services/<name>/README.md (responsibilities, endpoints, deps)
 - [ ] 5. Register the service in `deploy/docker-compose.yml` (SERVICE build arg)
 - [ ] 6. If it owns data: add a database + golang-migrate migrations + outbox
-- [ ] 7. If the Gateway should route to it: add a prefix in services/gateway/main.go
+- [ ] 7. If the Gateway should route to it: add a prefix in go/services/gateway/main.go
 - [ ] 8. Run: make build && make vet
 ```
 

@@ -1,0 +1,12 @@
+.git
+.github
+.cursor
+**/.env
+**/.env.*
+!**/.env.production
+**/node_modules
+**/dist
+go/**/tmp
+**/*.md
+docs/
+agent-transcripts/

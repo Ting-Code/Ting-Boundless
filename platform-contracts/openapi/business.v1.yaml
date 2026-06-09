@@ -1,0 +1,174 @@
+openapi: 3.0.3
+info:
+  title: Ting Boundless Business API
+  version: 1.0.0
+  description: Domain CRUD under /v1/business/* (Nest business-service).
+
+paths:
+  /v1/business/ping:
+    get:
+      operationId: businessPing
+      summary: Smoke test
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessPingResponse'
+
+  /v1/business/me:
+    get:
+      operationId: businessMe
+      summary: Echo trusted identity from Gateway headers
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessMeResponse'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /v1/business/items:
+    get:
+      operationId: listBusinessItems
+      summary: List business items for the current tenant
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListItemsResponse'
+    post:
+      operationId: createBusinessItem
+      summary: Create a business item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateItemRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateItemResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+components:
+  schemas:
+    BusinessPingResponse:
+      type: object
+      required: [ok, service]
+      properties:
+        ok:
+          type: boolean
+          const: true
+        service:
+          type: string
+
+    BusinessMeResponse:
+      type: object
+      required: [user_id, tenant_id, roles, scopes, subject, request_id]
+      properties:
+        user_id:
+          type: string
+        tenant_id:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        subject:
+          type: string
+        request_id:
+          type: string
+
+    BusinessItem:
+      type: object
+      required: [id, tenant_id, title, body, created_by, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ListItemsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BusinessItem'
+
+    CreateItemRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        body:
+          type: string
+          maxLength: 5000
+
+    CreateItemResponse:
+      type: object
+      required: [item]
+      properties:
+        item:
+          $ref: '#/components/schemas/BusinessItem'
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            request_id:
+              type: string

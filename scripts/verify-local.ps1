@@ -48,7 +48,7 @@ if (Test-TcpPort "127.0.0.1" 5432) {
 if (Test-TcpPort "127.0.0.1" 5672) {
     Write-Host "[OK]   RabbitMQ (5672)" -ForegroundColor Green
 } else {
-    Write-Host "[SKIP] RabbitMQ (5672) — Start-Service RabbitMQ (admin) or scripts/start-infra.bat" -ForegroundColor Yellow
+    Write-Host "[SKIP] RabbitMQ (5672) — scripts/start-rabbitmq.bat (needs Erlang 27, not 29)" -ForegroundColor Yellow
 }
 
 if (Test-TcpPort "127.0.0.1" 9000) {
@@ -60,5 +60,5 @@ if (Test-TcpPort "127.0.0.1" 9000) {
 Write-Host ""
 Write-Host "=== Next steps ===" -ForegroundColor Cyan
 Write-Host "1. If PostgreSQL failed: add POSTGRES_ADMIN_PASSWORD=... to .env, then scripts/setup-local.bat"
-Write-Host "2. go run ./services/user-service  &&  curl http://127.0.0.1:8081/readyz"
-Write-Host "3. go run ./services/gateway       &&  curl http://127.0.0.1:8080/readyz"
+Write-Host "2. make run-user-service  &&  curl http://127.0.0.1:8081/readyz"
+Write-Host "3. make run-gateway       &&  curl http://127.0.0.1:8080/readyz"

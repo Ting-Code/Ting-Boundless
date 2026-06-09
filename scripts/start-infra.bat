@@ -5,11 +5,11 @@ REM Run from repo root: scripts\start-infra.bat
 echo Starting Redis...
 start "Redis" /D "D:\app\Redis-8.6.2" cmd /k redis-server.exe redis.conf
 
-set ERLANG_HOME=D:\app\Erlang OTP
+set ERLANG_HOME=D:\app\Erlang-OTP-27
 set RABBIT_HOME=D:\app\rabbitmq\rabbitmq_server-4.3.1
 if exist "%RABBIT_HOME%\sbin\rabbitmq-server.bat" (
     echo Starting RabbitMQ (ERLANG_HOME=%ERLANG_HOME%)...
-    start "RabbitMQ" /D "%RABBIT_HOME%\sbin" cmd /k "set ERLANG_HOME=D:\app\Erlang OTP&& rabbitmq-server.bat"
+    start "RabbitMQ" /D "%RABBIT_HOME%\sbin" cmd /k "set ERLANG_HOME=D:\app\Erlang-OTP-27&& rabbitmq-server.bat"
 ) else (
     echo RabbitMQ not found at %RABBIT_HOME%
     echo Try admin PowerShell: Start-Service RabbitMQ

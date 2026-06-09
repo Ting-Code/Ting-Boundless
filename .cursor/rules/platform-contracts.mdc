@@ -11,7 +11,7 @@ first, then regenerate/adapt SDKs.
 
 - Proto packages are versioned: `ting.<domain>.v1`. External APIs use a `/v1`
   path prefix.
-- Keep `proto/`, `schemas/*.json`, and the Go mirrors in `pkg/` consistent. If
+- Keep `proto/`, `schemas/*.json`, and the Go mirrors in `go/pkg/` consistent. If
   you change one (error model, identity context, audit event), update all.
 - Run `buf lint` and `buf breaking` before committing (`make proto`,
   `make proto-breaking`). Breaking changes must be intentional and caught in CI.

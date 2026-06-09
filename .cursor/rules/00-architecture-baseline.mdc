@@ -20,8 +20,15 @@ Authoritative source: `docs/AI_CONTEXT.md` (read it for full rules).
   with a known issuer + JWKS. No ad-hoc/custom tokens.
 - **Secrets** never enter source, images, or logs. Config via env (12-Factor).
 - **Don't add** K8s, Service Mesh, Dapr, or Backstage in V1 without approval.
+- **Go owns platform logic once** (`go/services/`: gateway, auth, audit, user, file, worker).
+  **All Node/TypeScript** lives in `node/` (pnpm monorepo). **NestJS + Drizzle** owns
+  domain CRUD in `node/apps/business-service`. **No duplicate auth** in Nest,
+  Next (`next-auth`), or a separate Node BFF.
+- **Frontends** (`node/apps/site` Next, `node/apps/admin` Vite) call Gateway `/v1` only;
+  share TS types via `node/packages/api-types` generated from `platform-contracts` OpenAPI.
 
 ## Layout
 
-`platform-contracts/` (source of truth) · `pkg/` (shared Go libs) ·
-`services/` (deployables) · `deploy/` (compose, nginx, otel) · `docs/`.
+`platform-contracts/` · `go/` (pkg, services, cmd, migrations) · `node/` (apps + packages) ·
+`deploy/` · `docs/`.
+Full chain: `docs/ARCHITECTURE.md` § End-to-End Request Chain.

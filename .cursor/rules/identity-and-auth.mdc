@@ -1,6 +1,6 @@
 ---
 description: Identity, auth, and token handling rules
-globs: services/**/*.go
+globs: go/services/**/*.go
 alwaysApply: false
 ---
 

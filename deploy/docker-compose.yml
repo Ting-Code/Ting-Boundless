@@ -28,6 +28,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/proxy.conf:/etc/nginx/proxy.conf:ro
+      - ../node/apps/admin/dist:/usr/share/nginx/html/admin:ro
     restart: unless-stopped
 
   gateway:
@@ -36,7 +37,15 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
       args: { SERVICE: gateway }
-    depends_on: [user-service, business-service, file-service]
+    depends_on: [user-service, file-service, auth-service]
+    environment:
+      USER_SERVICE_URL: http://user-service:8081
+      BUSINESS_SERVICE_URL: http://host.docker.internal:3005
+      FILE_SERVICE_URL: http://file-service:8083
+      AUTH_SERVICE_URL: http://auth-service:8084
+      REDIS_ADDR: redis:6379
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   auth-service:
     <<: *service-build
@@ -51,13 +60,6 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
       args: { SERVICE: user-service }
-
-  business-service:
-    <<: *service-build
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
-      args: { SERVICE: business-service }
 
   file-service:
     <<: *service-build
@@ -81,11 +83,17 @@ services:
       args: { SERVICE: worker }
 
   logto:
-    image: svhd/logto:latest
+    image: ghcr.io/logto-io/logto:latest
     env_file: ../.env
+    ports:
+      - "3001:3001"
+      - "3002:3002"
     environment:
       - TRUST_PROXY_HEADER=1
-      - DB_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${LOGTO_DB:-logto_db}
+      - DB_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${LOGTO_DB:-logto_db}
+      - ENDPOINT=http://127.0.0.1:3001
+      - ADMIN_ENDPOINT=http://127.0.0.1:3002
+    entrypoint: ["sh", "-c", "npm run alteration deploy latest && npm run cli db seed -- --swe --disable-admin-pwned-password-check && npm start"]
     restart: unless-stopped
 
   otel-collector:

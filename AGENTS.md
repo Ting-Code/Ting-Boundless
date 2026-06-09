@@ -7,6 +7,7 @@ Entry point for AI coding agents working in this repository.
 1. `docs/AI_CONTEXT.md` — compact, durable architecture rules. Read before proposing
    plans, creating services, touching auth, observability, or cross-language APIs.
 2. `docs/ARCHITECTURE.md` — full V1 architecture and rationale.
+4. `docs/E2E_ADMIN.md` — Gateway cookie → Admin → business-service local flow.
 3. `.cursor/rules/` — enforced conventions (auto-applied).
 
 ## Non-negotiables (summary; AI_CONTEXT.md is authoritative)
@@ -22,13 +23,26 @@ Entry point for AI coding agents working in this repository.
 ## Layout
 
 ```
-platform-contracts/  cross-language source of truth (proto + buf, JSON schemas)
-pkg/                 shared Go libraries (thin SDK over the contracts)
-services/            deployable services (one folder each)
+platform-contracts/  cross-language source of truth (OpenAPI, proto + buf, JSON schemas)
+go/                  Go monorepo (module root: go/go.mod)
+  pkg/               shared Go libraries (thin SDK over the contracts)
+  services/          Go platform deployables (gateway, auth, user, file, audit, worker)
+  cmd/               dev-jwt, migrate
+  migrations/        SQL migrations per Go service
+node/                pnpm monorepo — all Node/TypeScript (apps + packages)
+  apps/              business-service (Nest), admin (Vite), site (Next.js)
+  packages/          api-types, api-client (from OpenAPI)
 deploy/              docker-compose (apps + infra split), nginx, otel collector
-docs/                architecture docs
+docs/                architecture docs (full chain in ARCHITECTURE.md § End-to-End Request Chain)
 .cursor/             rules + skills
 ```
+
+## Language split
+
+- **Go** (`go/services/`): gateway, auth-service, audit-service, user-service, file-service, worker — platform logic only once.
+- **TypeScript** (`node/`): Nest `@ting/business-service` for domain CRUD under `/v1/business/*`; `@ting/admin` and `@ting/site` for frontends; share `@ting/api-types`; never duplicate OIDC in Nest or Next.
+
+Domain CRUD belongs in `node/apps/business-service`, not new Go services, unless explicitly approved.
 
 ## Create a new Go service
 
@@ -38,7 +52,12 @@ required structure and baseline (health, logging, identity, audit, Dockerfile).
 ## Build / verify
 
 ```
-make build   # go build ./...
+make build        # cd go && go build ./...
 make vet
 make test
+make run-gateway   # cd go && go run ./services/gateway
+make run-business  # Nest business-service :3005
+make run-admin     # Vite admin :5173
+make node-install  # pnpm install in node/
+make node-build    # build api-types + business-service
 ```

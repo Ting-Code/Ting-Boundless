@@ -1,7 +1,12 @@
 # platform-contracts
 
 The cross-language **source of truth**. Define shared behavior here first;
-language SDKs (e.g. Go `pkg/`) are helpers, not the source of truth.
+language SDKs (e.g. Go `go/pkg/`, TS `@ting/api-types`) are helpers, not the source of truth.
+
+## OpenAPI (REST /v1)
+
+- `openapi/business.v1.yaml` — business domain (items CRUD, ping, me)
+- Generate TS types: `cd node && pnpm generate:api-types` (wire openapi-typescript when ready)
 
 ## Contents
 
@@ -10,7 +15,7 @@ language SDKs (e.g. Go `pkg/`) are helpers, not the source of truth.
 | `proto/` | Protobuf API + shared message contracts (error, identity, audit) |
 | `buf.yaml` / `buf.gen.yaml` | buf lint, breaking-change, multi-language codegen |
 | `schemas/` | Language-neutral JSON Schemas (logging, audit event, error, identity) |
-| `docs/` | Tracing and metrics conventions |
+| `docs/` | Logging, tracing, and metrics conventions |
 
 ## Rules
 

@@ -1,0 +1,20 @@
+# Standalone Logto for local dev (host Postgres + Docker).
+# Usage: docker compose -f deploy/docker-compose.logto.yml up -d
+#
+# Requires Docker Desktop. Connects to Postgres on the host via host.docker.internal.
+
+name: ting-logto
+
+services:
+  logto:
+    image: ghcr.io/logto-io/logto:latest
+    ports:
+      - "3001:3001"
+      - "3002:3002"
+    environment:
+      TRUST_PROXY_HEADER: "1"
+      DB_URL: postgresql://ting:change-me@host.docker.internal:5432/logto_db
+      ENDPOINT: http://127.0.0.1:3001
+      ADMIN_ENDPOINT: http://127.0.0.1:3002
+    entrypoint: ["sh", "-c", "npm run alteration deploy latest && npm run cli db seed -- --swe --disable-admin-pwned-password-check && npm start"]
+    restart: unless-stopped

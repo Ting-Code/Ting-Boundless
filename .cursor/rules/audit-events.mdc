@@ -1,6 +1,6 @@
 ---
 description: Audit event emission rules
-globs: services/**/*.go
+globs: go/services/**/*.go
 alwaysApply: false
 ---
 

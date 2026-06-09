@@ -1,0 +1,10 @@
+{
+  "name": "@ting/site",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Next.js SSR public site",
+  "scripts": {
+    "dev": "echo \"Scaffold pending: next dev\" && exit 1",
+    "build": "echo \"Scaffold pending\" && exit 1"
+  }
+}

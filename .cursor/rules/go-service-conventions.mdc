@@ -1,13 +1,13 @@
 ---
 description: Go service conventions for Ting Boundless
-globs: services/**/*.go,pkg/**/*.go
+globs: go/services/**/*.go,go/pkg/**/*.go
 alwaysApply: false
 ---
 
 # Go Service Conventions
 
 - One module (`github.com/ting-boundless/boundless`). Service entrypoints live in
-  `services/<name>/main.go`; service-private code in `services/<name>/internal/`.
+  `go/services/<name>/main.go`; service-private code in `go/services/<name>/internal/`.
 - Reuse `pkg/`: `logger`, `identity`, `errs`, `httpx`, `audit`. Don't reinvent.
 - Every HTTP service:
   - builds the logger with `logger.New(serviceName, env)`

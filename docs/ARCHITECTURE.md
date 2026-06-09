@@ -2,7 +2,7 @@
 
 ## One-Sentence Architecture
 
-Nginx guards the edge, Go Gateway/BFF owns shared request logic, Logto owns identity, Go services own core business, Python is reserved for AI/data workloads, platform-contracts keep cross-language behavior consistent, OpenTelemetry makes the system observable, CloudEvents audit events flow into Audit Service, and PostgreSQL/Redis/RabbitMQ/S3 form the infrastructure base.
+Nginx guards the edge, Go Gateway/BFF owns shared request logic (identity, routing, BFF cookies) without duplication, Logto owns identity through OIDC/JWKS, Go services own platform capabilities (auth integration, audit, user, file, worker), NestJS + Drizzle owns domain CRUD in TypeScript, Next.js serves SSR web and Vite serves the admin SPA, platform-contracts and generated `node/packages/api-types` keep cross-language behavior and shared TS types consistent, Python is reserved for heavy AI/data pipelines, OpenTelemetry makes the system observable, CloudEvents audit events flow into Audit Service, and PostgreSQL/Redis/RabbitMQ/S3 form the infrastructure base.
 
 ## Memory Model
 
@@ -130,8 +130,11 @@ flowchart TB
   Gateway --> LogtoJWKS[OIDC / JWKS Verify]
   Logto --> AuthDB[(PostgreSQL logto_db)]
 
+  Nginx --> NextApp[Next.js SSR site]
+  Nginx --> AdminSPA[Vite Admin SPA static]
+  Gateway --> NextApp
   Gateway --> UserSvc[Go User Service]
-  Gateway --> BizSvc[Go Business Service]
+  Gateway --> BizSvc[Nest Business Service]
   Gateway --> FileSvc[Go File Service]
   Gateway -. future .-> PySvc[Python AI/Data Service]
 
@@ -300,32 +303,111 @@ never own domain business logic
 
 Any token minted here must be a standard JWT verifiable by the Gateway through a known issuer and JWKS, never an ad-hoc custom token.
 
-### Go Business Services
+### Service Language Split
 
-Go is the default language for core services.
-
-Initial services:
+Public capabilities are implemented once in Go. Domain CRUD and admin-facing business APIs
+are implemented in TypeScript (NestJS). Presentation is split between Next.js (SSR) and
+Vite (admin SPA). All browser and app traffic still enters through the Go Gateway.
 
 ```text
+go/ (platform, no duplication):
+  go/services/: gateway, auth-service, audit-service, user-service, file-service, worker
+  go/pkg/: shared libraries
+  go/cmd/, go/migrations/
+
+TypeScript (domain CRUD + web UI) — all under node/ pnpm monorepo:
+  node/apps/business-service (NestJS + Drizzle)
+  node/apps/site (Next.js)
+  node/apps/admin (Vite + React)
+  node/packages/api-types (shared types)
+
+Python (heavy AI/data, when needed):
+  batch pipelines, training, embeddings at scale
+```
+
+### Go Platform Services
+
+Go is the default language for platform and shared infrastructure services.
+
+Initial Go services:
+
+```text
+gateway
+auth-service
+audit-service
 user-service
-business-service
 file-service
 worker
 ```
 
-`audit-service` is a platform service, not a domain business service. It is described in the Audit Baseline section and must not own business domain logic.
+`audit-service` is a platform service, not a domain business service. It is described in
+the Audit Baseline section and must not own business domain logic.
+
+Go platform responsibilities:
+
+```text
+JWT/session verification and identity header injection (gateway only)
+IdP integration and webhooks (auth-service)
+audit ingestion (audit-service)
+user profile and membership baseline (user-service)
+file storage metadata and OSS integration (file-service)
+async jobs (worker)
+```
+
+Go platform services must not re-implement domain CRUD that belongs in
+`business-service`.
+
+### Node Business Service (NestJS + Drizzle)
+
+`node/apps/business-service` (`@ting/business-service`) is the primary domain API for
+CRUD, admin workflows, and future productized AI endpoints. It runs as a NestJS HTTP
+service behind the Gateway on the internal network.
+
+Stack:
+
+```text
+NestJS + TypeScript
+Drizzle ORM + PostgreSQL (drizzle-kit migrations)
+identity from Gateway-injected headers only (no end-user JWT parsing)
+Transactional Outbox for audit-worthy writes
+/healthz, /readyz, /metrics, ECS JSON logs, traceparent propagation
+```
 
 Responsibilities:
 
 ```text
-domain logic
-domain authorization
-resource ownership checks
-tenant isolation
-business data management
-event publishing
-audit event publishing
+domain logic and CRUD APIs under /v1/business/*
+domain authorization (resource ownership, tenant isolation, business-state rules)
+business data management in app_db schemas owned by this service
+event publishing and audit outbox writes in the same DB transaction
+optional AI HTTP endpoints under /v1/business/ai/* (Vercel AI SDK / Mastra later)
 ```
+
+NestJS is one upstream microservice behind the Gateway, not a second gateway or BFF.
+Do not add a separate Node BFF for the admin SPA. Do not use Next.js Route Handlers as
+the primary business backend.
+
+### Web Tier
+
+Two frontends share the same Gateway session and `/v1` APIs:
+
+```text
+node/apps/site (Next.js, @ting/site):
+  SSR and SEO pages
+  Server Components fetch Gateway /v1 or read trusted proxy headers
+  no next-auth or duplicate OIDC; no end-user JWT in browser JavaScript
+  user-specific pages: force-dynamic / noStore (no cached HTML with identity)
+
+node/apps/admin (Vite + React, @ting/admin):
+  internal admin SPA (basename /admin when path-routed)
+  Ant Design (or equivalent) for tables and forms
+  TanStack Query for server state against /v1
+  credentials: include for Cookie sessions
+  types from @ting/api-types (generated from platform-contracts)
+```
+
+Static admin assets can be served by Nginx without a Node runtime. Next.js requires a
+Node process and should be reached only through Nginx/Gateway on the internal network.
 
 ### Python AI/Data Services
 
@@ -415,6 +497,196 @@ Mobile uses Logto PKCE directly; the Gateway is not involved in its login
 Confirm whether Logto covers WeChat mini-program natively; otherwise implement code2session in auth-service
 ```
 
+Web / Admin / Next share the same Web credential model in the matrix above: HttpOnly
+cookie through the Gateway BFF. Next SSR pages are not a separate auth path.
+
+## End-to-End Request Chain
+
+This section is the canonical V1 wiring for clients, Gateway routing, services, contracts,
+and data. V2 adds gRPC on hot internal paths without changing the external `/v1` HTTP
+surface.
+
+### Repository Layout
+
+```text
+Ting-Boundless/
+  platform-contracts/     OpenAPI (external REST) + proto (common types, V2 gRPC)
+  node/                   pnpm monorepo — all Node/TypeScript
+    apps/
+      business-service/   NestJS + Drizzle (@ting/business-service)
+      site/               Next.js SSR (@ting/site)
+      admin/              Vite + React SPA (@ting/admin)
+    packages/
+      api-types/          generated TS from OpenAPI (@ting/api-types)
+      api-client/         optional orval + TanStack Query (@ting/api-client)
+  go/                     Go monorepo (go.mod lives here)
+    pkg/                  shared libraries
+    services/             gateway, auth, audit, user, file, worker
+    cmd/                  migrate, dev-jwt
+    migrations/           SQL per Go service
+  deploy/                 compose, nginx, otel
+```
+
+### Gateway Route Table
+
+| Path | Upstream | Notes |
+|------|----------|-------|
+| `/sign-in`, `/callback`, `/sign-out` | Go Gateway BFF | Web Cookie session; OIDC via Logto |
+| `/`, `/product/*`, public SSR paths | `next-app` (internal) | Next.js behind Gateway/Nginx |
+| `/admin`, `/admin/*` | Nginx static / admin build | SPA; `try_files` → `index.html` |
+| `/v1/business/*` | `business-service` | NestJS domain CRUD |
+| `/v1/users/*` | `user-service` | Go user domain |
+| `/v1/files/*` | `file-service` | Go files |
+| `/v1/auth/*` | `auth-service` (via Gateway) | Public login/SMS integration; nginx stricter rate limit |
+| `/healthz`, `/readyz`, `/metrics` | each service | Liveness/readiness per service |
+
+**Gateway anonymous prefixes** (`GATEWAY_ANON_PREFIXES`): paths that may pass without
+end-user credentials (health, BFF `/sign-in*`, `/admin` static, `/v1/business/ping`,
+`/v1/auth/*`). All other `/v1/*` requests without a valid cookie or Bearer JWT are
+rejected at the Gateway (`401 auth.unauthenticated`), not in business services.
+
+**Internal trust**: Gateway injects `X-Internal-Token` on upstream proxy requests;
+business and platform services reject forged identity headers without it (`INTERNAL_API_TOKEN`).
+
+Browsers talk only to Nginx/Gateway. `business-service` listens on the internal network
+and must not be exposed directly to the public internet.
+
+### Admin SPA Chain
+
+```text
+1. Browser loads /admin static assets from Nginx.
+2. Unauthenticated API calls redirect to Gateway /sign-in?return_to=/admin/...
+3. Gateway BFF completes OIDC with Logto and sets HttpOnly + Secure cookie.
+4. Admin JS calls GET/POST /v1/business/... with credentials: include.
+5. Gateway validates cookie/session, strips untrusted headers, injects identity headers.
+6. Gateway forwards to Nest business-service.
+7. Nest Identity guard reads X-User-Id, X-Tenant-Id, X-Roles, etc.
+8. Nest enforces domain authorization, runs Drizzle transaction (business row + outbox).
+9. JSON response uses the unified error envelope from platform-contracts.
+10. TanStack Query in admin caches and revalidates using @ting/api-types shapes.
+```
+
+### Next SSR Chain
+
+```text
+1. Browser requests a public or authenticated SSR page (e.g. /product/123).
+2. Nginx → Gateway → next-app (internal).
+3. Next Server Component fetches Gateway /v1/business/... (server-side) with Cookie
+   forwarded, or reads trusted identity headers from the Gateway proxy.
+4. Nest/Go services return JSON; Next renders HTML.
+5. Client islands (chat, live tables) may use TanStack Query or Vercel AI SDK for UI
+   streaming only; business rules remain in Nest/Go APIs.
+6. User-specific routes must not be statically cached at the CDN or Next layer.
+```
+
+### Mini Program Chain
+
+```text
+1. Mini program → Gateway or auth-service login (code2session).
+2. auth-service issues a standard JWT (known issuer + JWKS), not an ad-hoc token.
+3. Subsequent calls: Authorization: Bearer → Gateway JWKS verify → identity headers.
+4. Same /v1/business/* and /v1/users/* as Web; OpenAPI contract is client-agnostic.
+```
+
+### Mobile App Chain
+
+```text
+1. App authenticates with Logto via OIDC + PKCE (login does not pass through Gateway).
+2. App stores tokens in OS secure storage.
+3. API calls: Bearer → Gateway → identity headers → Nest/Go services.
+```
+
+### Type Sharing Chain
+
+```text
+1. Edit platform-contracts OpenAPI for external /v1 REST (business domain first).
+2. CI: buf lint/breaking for proto; OpenAPI lint/breaking for REST.
+3. Generate @ting/api-types in node/packages/api-types (openapi-typescript or orval).
+4. Nest controllers and DTO validation align with api-types.
+5. node/apps/admin and node/apps/site import the same @ting/api-types package.
+6. Drizzle schema types stay inside node/apps/business-service; map db rows to API DTOs in the service layer.
+7. make proto generates Go types for identity, error, audit, and V2 gRPC services.
+```
+
+Do not maintain hand-written duplicate interfaces in the frontend and Nest. Do not use
+Nest-only or Next-only type tunnels (for example tRPC or Eden Treaty) as the
+cross-client contract while mini-program and mobile share the same APIs.
+
+### Internal Communication
+
+V1: HTTP only on the internal network.
+
+```text
+Gateway → business-service   HTTP
+Gateway → user-service       HTTP
+business-service → user-service   HTTP (identity headers forwarded)
+```
+
+V2: add gRPC for hot internal paths; external clients remain on HTTP `/v1`.
+
+```text
+Gateway → user-service              HTTP or gRPC (Gateway implements REST facade)
+business-service → user-service     gRPC + IdentityContext metadata
+```
+
+gRPC metadata mirrors HTTP identity headers (see `platform-contracts/proto/ting/common/v1/identity.proto`):
+
+```text
+X-Request-Id   → x-request-id
+X-User-Id      → x-user-id
+X-Tenant-Id    → x-tenant-id
+X-Roles        → x-roles
+traceparent    → traceparent
+```
+
+Business services accept identity on gRPC only from trusted internal callers, with the
+same rules as HTTP. Generate Go and TypeScript stubs from the same proto via buf; add TS
+plugins to `buf.gen.yaml` when Nest gRPC starts.
+
+### Observability And Audit Chain
+
+```text
+Gateway generates request_id and traceparent at the edge.
+Gateway emits entry-level audit events asynchronously.
+Each service logs ECS JSON to stdout with request_id and service.name.
+Domain writes in business-service: PostgreSQL business tables + outbox in one transaction.
+Dispatcher/worker → audit-service → audit_db.
+```
+
+### Local Development Chain
+
+```text
+1. Local PostgreSQL + Redis (or make up-infra).
+2. cp .env.example .env
+3. make run-gateway
+4. make run-user-service (and other Go services as needed)
+5. cd node && pnpm dev:business           # Nest :3001
+6. cd node && pnpm dev:admin              # Vite, proxy /v1 → Gateway
+7. cd node && pnpm dev:site               # Next, API calls via Gateway
+8. cd node && pnpm generate:api-types     # after OpenAPI changes
+```
+
+### Phased Rollout
+
+| Phase | Goal | Prove |
+|-------|------|-------|
+| P0 | Gateway real JWT/Cookie BFF; fix middleware order | Login → cookie → identity headers |
+| P1 | Nest + Drizzle first resource; OpenAPI + api-types | Admin list/create/update/delete |
+| P2 | user-service `/v1/users/me` | Admin shows current user |
+| P3 | Next SSR pages (1–2) | Same cookie on public SSR |
+| P4 | Outbox + audit minimal loop | Business write produces audit record |
+| P5 | compose + nginx route table matches production | Full stack on ECS |
+| V2 | buf TS gen; gRPC internal hot paths; full OTel | Nest ↔ user-service latency path |
+
+### Future AI Extension (Same Chain)
+
+Product AI features extend Nest, not Gateway:
+
+```text
+Admin/Next UI → Gateway /v1/business/ai/* → Nest AiModule (AI SDK / Mastra)
+Tools call Drizzle or internal Go file-service; prompts and tool schemas also land in OpenAPI.
+```
+
 ## P0 Boundaries To Decide In V1
 
 These are hard to retrofit and must be decided early.
@@ -467,6 +739,9 @@ X-Auth-Subject
 ```
 
 Async jobs must store the actor context that created the job.
+
+On gRPC (V2), propagate the same fields as gRPC metadata or as `ting.common.v1.IdentityContext`
+in RPC messages. Mapping is defined in `identity.proto`.
 
 Propagating identity is not enough; the callee must also be able to trust the caller. Identity headers must only be accepted from the Gateway or from other trusted internal services.
 
@@ -681,14 +956,14 @@ Host-native development (preferred for local debugging):
 install PostgreSQL / Redis / RabbitMQ on the host
 psql -U postgres -f deploy/postgres/setup-local.sql
 cp .env.example .env
-go run ./services/user-service   # connects to localhost, probes /readyz
+make run-user-service            # connects to localhost, probes /readyz
 ```
 
 Optional Docker infra (when native install is not desired):
 
 ```text
 make up-infra                              # data stores in Docker
-POSTGRES_HOST=localhost go run ./services/...   # services on the host
+POSTGRES_HOST=localhost make run-gateway        # Go services on the host
 ```
 
 Application services connect via environment variables (`POSTGRES_HOST`,
@@ -698,11 +973,11 @@ assume co-location with data stores.
 Shared connection helpers:
 
 ```text
-pkg/db       PostgreSQL (pgx pool, /readyz probe)
-pkg/cache    Redis
-pkg/mq       RabbitMQ
-pkg/storage  S3-compatible endpoint (TCP probe)
-pkg/config   LoadEnvFile(), IsPlaceholder() for cloud stubs
+go/pkg/db       PostgreSQL (pgx pool, /readyz probe)
+go/pkg/cache    Redis
+go/pkg/mq       RabbitMQ
+go/pkg/storage  S3-compatible endpoint (TCP probe)
+go/pkg/config   LoadEnvFile(), IsPlaceholder() for cloud stubs
 ```
 
 Local dev defaults target `localhost`. Production uses managed endpoints; until
@@ -745,28 +1020,32 @@ Nginx
 Go Gateway/BFF
 Logto
 auth-service (IdP integration)
-Go core services
+Go platform services (user, file, audit, worker)
+NestJS business-service + Drizzle
+node/apps/site (Next.js) + node/apps/admin (Vite)
+node/packages/api-types generated from platform-contracts OpenAPI
 PostgreSQL (managed or local infra compose for dev)
 Redis
 RabbitMQ
 S3/OSS
 Audit Service
 OpenTelemetry baseline
-platform-contracts
-Go service template
+platform-contracts (OpenAPI + proto)
+Go service template + Nest business-service template
 minimal CI and backups
 ```
 
 ### V2: Multi-Service Maturity
 
 ```text
-gRPC + Protobuf for hot internal APIs
-buf lint and breaking-change checks
-full OpenTelemetry pipeline
+gRPC + Protobuf for hot internal APIs (Gateway or Nest ↔ Go); external /v1 stays HTTP
+buf lint, breaking-change checks, and TypeScript generation plugins in buf.gen.yaml
+full OpenTelemetry pipeline (including gRPC interceptors)
 Prometheus/Grafana/Loki/Tempo
 async audit via RabbitMQ
-Python AI/Data service
-stronger service templates for Python/Node/Java
+Python AI/Data service for heavy offline/ML pipelines
+Nest AI modules (AI SDK / Mastra) for product-facing AI HTTP APIs
+stronger service templates for Python and Nest
 ```
 
 ### V3: Platform Stage
@@ -791,12 +1070,15 @@ The V1 decision is:
 ```text
 Nginx at the edge.
 Logto for identity.
-Go Gateway/BFF for shared request logic.
-Go for core business services.
-Python only where AI/data value is clear.
-platform-contracts for cross-language consistency.
+Go Gateway/BFF for all shared request logic (no duplicate auth in Nest or Next).
+Go for platform services (gateway, auth, audit, user, file, worker).
+NestJS + Drizzle for domain CRUD in business-service.
+Next.js for SSR web; Vite + React for admin SPA; TanStack Query + @ting/api-types in node/ monorepo.
+Python only for heavy AI/data pipelines when clearly needed.
+platform-contracts (OpenAPI + proto) for cross-language consistency and shared TS types.
+HTTP /v1 for all external and V1 internal traffic; gRPC in V2 for hot internal paths.
 OpenTelemetry for observability.
-CloudEvents + Audit Service for auditability.
+CloudEvents + Audit Service + Transactional Outbox for auditability.
 PostgreSQL/Redis/RabbitMQ/S3 as the infrastructure base.
 Docker Compose for stateless apps; data stores managed or in deploy/docker-compose.infra.yml for local dev.
 Single ECS first, K8s later.

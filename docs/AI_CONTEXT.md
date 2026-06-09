@@ -6,7 +6,7 @@ This file gives AI coding agents a compact, durable understanding of the project
 
 ## Architecture In One Sentence
 
-Nginx guards the edge, Go Gateway/BFF centralizes shared request logic, Logto owns identity through OIDC/JWKS, Go services own core business, Python is reserved for AI/data, platform-contracts define cross-language behavior, OpenTelemetry provides observability, CloudEvents audit events flow into Audit Service, and PostgreSQL/Redis/RabbitMQ/S3 form the infrastructure base.
+Nginx guards the edge, Go Gateway/BFF centralizes shared request logic without duplication, Logto owns identity through OIDC/JWKS, Go services own platform capabilities, NestJS + Drizzle owns domain CRUD in node/apps/business-service; Next.js and Vite admin in node/apps share Gateway cookies and /v1 APIs via @ting/api-types, Python is reserved for heavy AI/data pipelines, platform-contracts define cross-language behavior, OpenTelemetry provides observability, CloudEvents audit events flow into Audit Service, and PostgreSQL/Redis/RabbitMQ/S3 form the infrastructure base.
 
 ## Non-Negotiable Rules
 
@@ -228,17 +228,47 @@ do not invent custom per-endpoint tokens the Gateway cannot verify uniformly
 
 ### Business Services
 
-Default:
+Language split:
 
 ```text
-Go
+Go platform: gateway, auth-service, audit-service, user-service, file-service, worker
+TypeScript domain: node/apps/business-service (NestJS + Drizzle) — primary CRUD under /v1/business/*
+Python: heavy AI/data pipelines (batch, training, embeddings at scale)
 ```
 
-Future specialized services:
+NestJS runs as one HTTP microservice behind the Gateway. It must not parse end-user JWTs,
+must not implement a second BFF for the admin SPA, and must not replace Gateway auth.
+Next.js Route Handlers are not the primary business backend.
+
+### Web Tier
 
 ```text
-Python for AI/data workloads
-Node.js or Java only when there is a strong domain reason
+node/apps/site: Next.js SSR/SEO; Server fetches Gateway /v1; no next-auth; no JWT in browser JS
+node/apps/admin: Vite + React SPA; TanStack Query; credentials: include; types from @ting/api-types
+Both use the same Web cookie model through Gateway BFF.
+Admin static assets may be served without a Node runtime.
+```
+
+### Type Sharing
+
+```text
+platform-contracts OpenAPI → generate node/packages/api-types (@ting/api-types)
+Nest business-service + node/apps/admin + node/apps/site import api-types
+Drizzle DB types stay server-side only; map to API DTOs in Nest
+proto/buf for common types (identity, error, audit) and V2 internal gRPC
+Do not use tRPC or framework-only type tunnels as the cross-client contract.
+```
+
+### End-to-End Chain (V1)
+
+```text
+Browser → Nginx → Go Gateway (cookie/Bearer → identity headers)
+  → /v1/business/* → Nest + Drizzle + outbox
+  → /v1/users/*, /v1/files/* → Go services
+  → /, SSR paths → Next (internal)
+  → /admin/* → Vite static
+V1 internal traffic: HTTP. V2 hot paths: gRPC + identity metadata (see identity.proto).
+Full route table and phased rollout: docs/ARCHITECTURE.md § End-to-End Request Chain.
 ```
 
 ### Data And Infra
@@ -264,13 +294,13 @@ PostgreSQL/Redis/RabbitMQ natively on the host (preferred). Optional Docker infr
 `deploy/docker-compose.infra.yml`. Application services live in
 `deploy/docker-compose.yml` and connect via env (`POSTGRES_HOST`, `REDIS_ADDR`, …).
 
-Connection libraries live in `pkg/db`, `pkg/cache`, `pkg/mq`, `pkg/storage`.
+Connection libraries live in `go/pkg/db`, `go/pkg/cache`, `go/pkg/mq`, `go/pkg/storage`.
 Services load `.env` via `config.LoadEnvFile()` for local dev; production injects
 env at deploy time. Cloud placeholder values (e.g. `rm-xxx`, `*-placeholder`) skip
 real connections until replaced.
 
 ```text
-Local dev:  install PG/Redis locally → cp .env.example .env → go run ./services/...
+Local dev:  install PG/Redis locally → cp .env.example .env → make run-gateway / make run-user-service
 Optional:   make up-infra (Docker infra) + POSTGRES_HOST=localhost
 Production: make up-apps + replace cloud placeholders in .env
 ```
@@ -511,7 +541,9 @@ Do not:
 ```text
 put business authorization into Gateway
 make services parse user JWTs unless explicitly required for an exception
+add next-auth, a Nest BFF, or Next Route Handlers that duplicate Gateway OIDC/cookie auth
 create language-specific conventions without updating platform-contracts
+use tRPC or Eden-only types as the cross-client API contract instead of platform-contracts
 write plain-text logs or file-based service logs
 mix audit records into ordinary logs only
 write audit events directly to Audit Service without outbox when tied to business writes
@@ -526,6 +558,9 @@ Prefer:
 
 ```text
 small Go services following the service template
+node/ pnpm monorepo for all Node/TypeScript
+NestJS business-service for domain CRUD (Drizzle, outbox, identity headers)
+@ting/api-types generated from platform-contracts OpenAPI
 12-Factor app behavior
 JSON stdout logs
 OpenTelemetry instrumentation
@@ -572,26 +607,31 @@ Nginx
 Go Gateway/BFF
 Logto
 auth-service (IdP integration)
-Go core services
+Go platform services (user, file, audit, worker)
+node/ pnpm monorepo (apps + packages)
+NestJS business-service + Drizzle (node/apps/business-service)
+node/apps/site (Next.js) + node/apps/admin (Vite)
+node/packages/api-types from platform-contracts OpenAPI
 PostgreSQL (managed or local infra compose for dev)
 Redis
 RabbitMQ
 S3/OSS
 Audit Service
 OpenTelemetry baseline
-platform-contracts
-Go service template
+platform-contracts (OpenAPI + proto)
+Go service template + Nest business-service baseline
 minimal CI and backups
 ```
 
 V2:
 
 ```text
-gRPC + Protobuf for hot internal APIs
-buf checks in CI
-full observability pipeline
+gRPC + Protobuf for hot internal APIs; external /v1 stays HTTP
+buf checks and TypeScript proto generation in CI
+full observability pipeline (gRPC interceptors)
 async audit through RabbitMQ
-Python AI/Data service
+Python for heavy AI/data pipelines
+Nest AI modules (AI SDK / Mastra) for product AI HTTP APIs
 multi-language service templates
 ```
 

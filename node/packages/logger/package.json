@@ -1,0 +1,37 @@
+{
+  "name": "@ting/logger",
+  "version": "0.0.0",
+  "private": true,
+  "description": "ECS-style structured logger shared by Nest and web apps",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./nest": {
+      "types": "./dist/nest/index.d.ts",
+      "default": "./dist/nest/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "rxjs": "^7.8.0"
+  },
+  "peerDependenciesMeta": {
+    "@nestjs/common": { "optional": true },
+    "rxjs": { "optional": true }
+  },
+  "devDependencies": {
+    "@nestjs/common": "^11.0.11",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.10",
+    "rxjs": "^7.8.2",
+    "typescript": "^5.8.2"
+  }
+}
