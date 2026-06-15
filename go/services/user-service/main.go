@@ -50,7 +50,7 @@ func main() {
 	mux := http.NewServeMux()
 	health.Handler(mux)
 	mux.Handle("/v1/users/me", meHandler)
-	mux.Handle("GET /v1/users/", identity.Middleware(list.New(users)))
+	mux.Handle("GET /v1/users/", identity.Middleware(httpx.RequireRole("admin")(list.New(users))))
 
 	internalToken, ok := httpx.LoadInternalToken(log)
 	if !ok {

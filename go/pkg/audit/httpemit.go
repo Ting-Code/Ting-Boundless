@@ -46,6 +46,9 @@ func (e *HTTPEmitter) Emit(ctx context.Context, ev Event) error {
 	if err != nil {
 		return fmt.Errorf("marshal audit event: %w", err)
 	}
+	if ev.ID == "" || ev.Source == "" || ev.Type == "" {
+		return fmt.Errorf("audit event: id, source, and type are required")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.baseURL+"/internal/audit/events", bytes.NewReader(body))
 	if err != nil {
 		return err

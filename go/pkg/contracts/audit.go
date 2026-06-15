@@ -35,6 +35,12 @@ func AuditToProto(e audit.Event) (*commonv1.AuditEvent, error) {
 	}, nil
 }
 
+// ValidateAuditEvent checks that an audit event can round-trip through the proto contract.
+func ValidateAuditEvent(e audit.Event) error {
+	_, err := AuditToProto(e)
+	return err
+}
+
 // AuditFromProto maps the generated proto message to pkg/audit.Event.
 func AuditFromProto(m *commonv1.AuditEvent) audit.Event {
 	if m == nil {

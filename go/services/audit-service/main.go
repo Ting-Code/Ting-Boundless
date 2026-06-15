@@ -57,7 +57,9 @@ func main() {
 	mux.Handle("POST /internal/audit/events",
 		httpx.InternalAuth(internalToken)(ingest.New(events)),
 	)
-	mux.Handle("GET /v1/audit/events", identity.Middleware(query.New(events)))
+	mux.Handle("GET /v1/audit/events",
+		identity.Middleware(httpx.RequireRole("admin")(query.New(events))),
+	)
 
 	h := httpx.Chain(mux,
 		httpx.GatewayTrust(internalToken),

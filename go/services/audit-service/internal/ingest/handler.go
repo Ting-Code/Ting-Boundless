@@ -54,7 +54,7 @@ func handle(w http.ResponseWriter, r *http.Request, events eventWriter) {
 		return
 	}
 
-	if _, err := contracts.AuditToProto(e); err != nil {
+	if err := contracts.ValidateAuditEvent(e); err != nil {
 		httpx.WriteError(w, rid, errs.BadRequest("invalid_event_data", "event data is not contract-compatible"))
 		return
 	}

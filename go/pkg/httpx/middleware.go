@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ting-boundless/boundless/pkg/errs"
 	"github.com/ting-boundless/boundless/pkg/identity"
 	"github.com/ting-boundless/boundless/pkg/logger"
 	"github.com/ting-boundless/boundless/pkg/trace"
@@ -65,7 +66,8 @@ func Recover(base *slog.Logger) func(http.Handler) http.Handler {
 			defer func() {
 				if rec := recover(); rec != nil {
 					base.Error("panic recovered", slog.Any("panic", rec))
-					w.WriteHeader(http.StatusInternalServerError)
+					rid := r.Header.Get(identity.HeaderRequestID)
+					WriteError(w, rid, errs.Internal("internal", "internal server error"))
 				}
 			}()
 			next.ServeHTTP(w, r)

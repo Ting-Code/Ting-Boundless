@@ -32,15 +32,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, ok := identity.FromContext(r.Context())
-	if !ok || id.UserID == "" {
-		httpx.WriteError(w, id.RequestID, errs.Unauthorized("unauthenticated", "authentication required"))
-		return
-	}
-	if !identity.HasRole(id, "admin") {
-		httpx.WriteError(w, id.RequestID, errs.Forbidden("forbidden", "admin role required"))
-		return
-	}
+	id, _ := identity.FromContext(r.Context())
 	if h.events == nil {
 		httpx.WriteError(w, id.RequestID, errs.Internal("database_unavailable", "audit database not connected"))
 		return
