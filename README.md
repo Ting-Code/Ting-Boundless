@@ -11,7 +11,7 @@ choices that block future evolution.
 Nginx guards the edge, a Go Gateway/BFF centralizes shared request logic (no duplicate
 auth in Node or Next), Logto owns identity (OIDC/JWKS), Go services own platform
 capabilities, NestJS + Drizzle owns domain CRUD, Next.js serves SSR and Vite serves
-the admin SPA (shared `node/packages/api-types`), Python is reserved for heavy AI/data
+the admin SPA (shared `node/packages/api`), Python is reserved for heavy AI/data
 pipelines, `platform-contracts` define cross-language behavior, OpenTelemetry
 provides observability, CloudEvents audit events flow into the Audit Service, and
 PostgreSQL/Redis/RabbitMQ/S3 form the infrastructure base.
@@ -30,7 +30,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design and
 | `node/apps/business-service/` | NestJS + Drizzle domain API |
 | `node/apps/site/` | Next.js SSR public site |
 | `node/apps/admin/` | Vite + React admin SPA |
-| `node/packages/api-types/` | Generated TS types from OpenAPI |
+| `node/packages/api/` | `@ting/api` — paths, OpenAPI types, `apiFetch` helpers |
 | `go/` | **Go monorepo** — see [`go/README.md`](go/README.md) |
 | `go/pkg/` | Shared Go libraries (thin SDK over the contracts) |
 | `go/services/` | Go platform services only |
@@ -125,6 +125,7 @@ make node-install                # or: cd node && pnpm install
 make run-business                # Nest :3005
 make run-admin                   # Vite admin → Gateway cookie flow
 make e2e-admin                   # smoke script (see docs/E2E_ADMIN.md)
+make e2e-miniprogram           # mock 小程序登录 → Bearer JWT (docs/E2E_MINIPROGRAM.md)
 cd node && pnpm dev:site         # Next.js
 ```
 
@@ -150,6 +151,7 @@ over native installs, or for deployment:
 | **Native local (default)** | `go run` + locally installed PG/Redis | see above |
 | **Docker infra only** | DB in Docker, apps on host | `make up-infra`, set `POSTGRES_HOST=localhost` |
 | **Docker full stack** | everything containerized | `make up` |
+| **Observability only** | Tempo + Loki + Grafana | `make up-obs` → Grafana `http://localhost:3003` |
 | **Production apps** | managed RDS/Redis, apps in Docker | `make up-apps` + cloud `.env` |
 
 ```bash
@@ -161,7 +163,13 @@ make down       # stop all
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) § Data Infrastructure for rationale.
 
+**Environment profiles:** [`docs/ENV_PROFILES.md`](docs/ENV_PROFILES.md) — native-local vs
+docker-infra vs docker-full variable matrix.
+
 ## Conventions
 
 Every service: `/healthz`, `/readyz`, `/metrics`, JSON stdout logs (ECS-style),
 `traceparent` propagation, unified error responses, 12-Factor config via env.
+
+**CI:** GitHub Actions [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — Go
+`build`/`vet`/`test`, `buf lint`, Node monorepo build. Local: `make ci`.

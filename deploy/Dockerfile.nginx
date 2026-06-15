@@ -9,7 +9,7 @@ COPY node/packages ./packages
 COPY node/apps/admin ./apps/admin
 COPY node/apps/admin/.env.production ./apps/admin/.env.production
 RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @ting/api-types build && pnpm --filter @ting/admin build
+RUN pnpm --filter @ting/api build && pnpm --filter @ting/admin build
 
 FROM nginx:1.27-alpine
 COPY deploy/nginx/nginx.conf /etc/nginx/nginx.conf

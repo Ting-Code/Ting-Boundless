@@ -1,12 +1,23 @@
 # platform-contracts
 
 The cross-language **source of truth**. Define shared behavior here first;
-language SDKs (e.g. Go `go/pkg/`, TS `@ting/api-types`) are helpers, not the source of truth.
+language SDKs (e.g. Go `go/pkg/`, TS `@ting/api`) are helpers, not the source of truth.
 
 ## OpenAPI (REST /v1)
 
-- `openapi/business.v1.yaml` — business domain (items CRUD, ping, me)
-- Generate TS types: `cd node && pnpm generate:api-types` (wire openapi-typescript when ready)
+| Spec | Service | Paths |
+|------|---------|-------|
+| `openapi/common.v1.yaml` | shared | `ErrorEnvelope` |
+| `openapi/business.v1.yaml` | Nest business-service | `/v1/business/*` |
+| `openapi/users.v1.yaml` | Go user-service | `/v1/users/me` |
+| `openapi/files.v1.yaml` | Go file-service | `/v1/files/*` |
+| `openapi/audit.v1.yaml` | Go audit-service | `/v1/audit/events` |
+
+Generate TS types: `make generate-api` (openapi-typescript → `@ting/api`)
+
+Lint: `make lint-openapi` · Breaking (PR): `make openapi-breaking` (requires [oasdiff](https://github.com/Tufin/oasdiff))
+
+**V1 Web 后台** 消费上表全部 spec。小程序 / App 登录走 Go `auth-service`，暂不新增 `auth.v1.yaml` 或 Node 客户端。
 
 ## Contents
 
@@ -28,8 +39,9 @@ language SDKs (e.g. Go `go/pkg/`, TS `@ting/api-types`) are helpers, not the sou
 ## Generate
 
 ```bash
-make proto            # buf lint && buf generate  -> gen/ (gitignored)
+make proto            # buf lint && buf generate  -> go/gen/go/ (gitignored)
 make proto-breaking   # buf breaking against main
+make lint-openapi     # Redocly lint on openapi/*.yaml
 ```
 
-> `gen/` is gitignored; code is regenerated from these contracts.
+> `go/gen/` is gitignored; stubs land at `go/gen/go/ting/common/v1/`.

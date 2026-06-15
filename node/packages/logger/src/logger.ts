@@ -1,4 +1,5 @@
 import { getRequestContext } from './context';
+import { emitOtelLog } from './otel-logs';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -52,6 +53,13 @@ export function log(level: LogLevel, message: string, fields: LogFields = {}): v
   } else {
     console.log(line);
   }
+  emitOtelLog(level, message, {
+    ...(ctx.requestId ? { request_id: ctx.requestId } : {}),
+    ...(ctx.traceId ? { trace_id: ctx.traceId } : {}),
+    ...(ctx.userId ? { user_id: ctx.userId } : {}),
+    ...(ctx.tenantId ? { tenant_id: ctx.tenantId } : {}),
+    ...fields,
+  });
 }
 
 export const logger = {

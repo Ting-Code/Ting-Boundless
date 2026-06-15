@@ -1,0 +1,28 @@
+openapi: 3.0.3
+info:
+  title: Ting Boundless Common Schemas
+  version: 1.0.0
+  description: Shared components referenced by domain OpenAPI specs.
+
+servers:
+  - url: http://127.0.0.1:8080
+    description: Gateway (local)
+
+paths: {}
+
+components:
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            request_id:
+              type: string

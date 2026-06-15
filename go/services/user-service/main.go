@@ -11,10 +11,11 @@ import (
 
 	"github.com/ting-boundless/boundless/pkg/config"
 	"github.com/ting-boundless/boundless/pkg/db"
-	"github.com/ting-boundless/boundless/pkg/errs"
 	"github.com/ting-boundless/boundless/pkg/httpx"
 	"github.com/ting-boundless/boundless/pkg/identity"
 	"github.com/ting-boundless/boundless/pkg/logger"
+	"github.com/ting-boundless/boundless/services/user-service/internal/list"
+	"github.com/ting-boundless/boundless/services/user-service/internal/me"
 	"github.com/ting-boundless/boundless/services/user-service/internal/store"
 )
 
@@ -44,49 +45,28 @@ func main() {
 	health := httpx.NewHealth()
 	db.RegisterHealth(health, "postgres", pg.Probe)
 
+	meHandler := identity.Middleware(me.New(users))
+
 	mux := http.NewServeMux()
 	health.Handler(mux)
-	mux.Handle("GET /v1/users/me", identity.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		handleMe(w, r, users)
-	})))
+	mux.Handle("/v1/users/me", meHandler)
+	mux.Handle("GET /v1/users/", identity.Middleware(list.New(users)))
 
-	internalToken := httpx.Env("INTERNAL_API_TOKEN", "")
+	internalToken, ok := httpx.LoadInternalToken(log)
+	if !ok {
+		return
+	}
 
 	h := httpx.Chain(mux,
 		httpx.GatewayTrust(internalToken),
 		httpx.RequestID,
 		httpx.Recover(log),
 		httpx.AccessLog(log),
+		httpx.TraceContext,
 	)
 
 	addr := httpx.Env("HTTP_ADDR", ":8081")
-	if err := httpx.New(addr, h, log).Run(); err != nil {
+	if err := httpx.RunService(addr, serviceName, h, log); err != nil {
 		log.Error("server error", slog.Any("error", err))
 	}
-}
-
-func handleMe(w http.ResponseWriter, r *http.Request, users *store.Users) {
-	id, ok := identity.FromContext(r.Context())
-	if !ok || id.UserID == "" {
-		errs.Write(w, id.RequestID, errs.Unauthorized("unauthenticated", "authentication required"))
-		return
-	}
-	if users == nil {
-		errs.Write(w, id.RequestID, errs.Internal("database_unavailable", "database not connected"))
-		return
-	}
-
-	u, err := users.GetOrCreate(r.Context(), id)
-	if err != nil {
-		errs.Write(w, id.RequestID, errs.Internal("user_lookup_failed", "failed to load user profile"))
-		return
-	}
-
-	httpx.JSON(w, http.StatusOK, map[string]any{
-		"user_id":      u.ID,
-		"tenant_id":    u.TenantID,
-		"display_name": u.DisplayName,
-		"roles":        id.Roles,
-		"created_at":   u.CreatedAt,
-	})
 }

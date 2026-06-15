@@ -15,8 +15,9 @@
     "@nestjs/common": "^11.0.11",
     "@nestjs/core": "^11.0.11",
     "@nestjs/platform-express": "^11.0.11",
-    "@ting/api-types": "workspace:*",
+    "@ting/api": "workspace:*",
     "@ting/logger": "workspace:*",
+    "amqplib": "^0.10.5",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.39.3",
     "pg": "^8.13.3",
@@ -27,6 +28,7 @@
   "devDependencies": {
     "@nestjs/cli": "^11.0.5",
     "@nestjs/schematics": "^11.0.1",
+    "@types/amqplib": "^0.10.7",
     "@types/express": "^5.0.0",
     "@types/node": "^22.13.10",
     "@types/pg": "^8.11.11",

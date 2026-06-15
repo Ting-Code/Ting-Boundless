@@ -8,7 +8,7 @@ COPY node/pnpm-lock.yaml node/pnpm-workspace.yaml node/package.json ./
 COPY node/packages ./packages
 COPY node/apps/business-service ./apps/business-service
 RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @ting/api-types build \
+RUN pnpm --filter @ting/api build \
  && pnpm --filter @ting/logger build \
  && pnpm --filter @ting/business-service build
 RUN pnpm deploy --filter @ting/business-service --prod /out

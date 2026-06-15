@@ -9,6 +9,7 @@ import (
 
 	"github.com/ting-boundless/boundless/pkg/identity"
 	"github.com/ting-boundless/boundless/pkg/logger"
+	"github.com/ting-boundless/boundless/pkg/trace"
 )
 
 // RequestID ensures every request has a request id in context and response.
@@ -22,6 +23,16 @@ func RequestID(next http.Handler) http.Handler {
 			r.Header.Set(identity.HeaderRequestID, rid)
 		}
 		w.Header().Set(identity.HeaderRequestID, rid)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// TraceContext ensures every request has a W3C traceparent for log correlation
+// and downstream propagation. Incoming traceparent is preserved; absent values
+// get a new root span at this hop.
+func TraceContext(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		trace.EnsureRequest(r.Header, w.Header().Set)
 		next.ServeHTTP(w, r)
 	})
 }

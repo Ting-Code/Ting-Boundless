@@ -86,6 +86,8 @@ make run-gateway
 
 ## 4. Test real `/sign-in`
 
+完整 BFF 流程、Admin 集成、生产 checklist 见 **[BFF_LOGTO.md](./BFF_LOGTO.md)**。
+
 1. Build admin SPA once: `cd node && pnpm --filter @ting/admin build` (Gateway serves it at `/admin`)
 2. Open `http://127.0.0.1:8080/sign-in?return_to=/admin/items`
 3. Log in at Logto → redirect to `/callback` → session cookie set
@@ -95,6 +97,14 @@ make run-gateway
 curl -b cookies.txt -c cookies.txt -L "http://127.0.0.1:8080/sign-in?return_to=/"
 curl -b cookies.txt http://127.0.0.1:8080/v1/users/me
 ```
+
+## Native / mobile app
+
+Mobile clients use **OIDC + PKCE directly with Logto** (not the Gateway BFF cookie).
+Create a **Native App** in Logto and call the API with `Authorization: Bearer`.
+
+See **[MOBILE_AUTH.md](./MOBILE_AUTH.md)** for Logto setup, PKCE flow, token storage, and
+local smoke (`make e2e-mobile`).
 
 ## Docker (optional)
 
@@ -110,6 +120,25 @@ Uses host Postgres via `host.docker.internal`.
 
 Point `OIDC_ISSUER`, `OIDC_JWKS_URL`, and client credentials at your cloud tenant.
 Same BFF redirect URI and API resource identifier rules apply.
+
+## Webhooks (identity audit)
+
+1. Logto Console → **Webhooks** → Create
+2. Endpoint URL: `https://<api-host>/internal/webhooks/logto` (nginx → Gateway → auth-service)
+   Local direct: `http://127.0.0.1:8084/internal/webhooks/logto` or via Gateway `:8080`
+3. Events: `PostSignIn`, `PostRegister`, `Identifier.Lockout` (add `User.Created` / `User.Deleted` if needed)
+4. Copy **Signing key** → `.env` as `LOGTO_WEBHOOK_SIGNING_KEY`
+5. Ensure `AUDIT_SERVICE_URL=http://127.0.0.1:8085` and audit-service is running
+
+Local smoke without Logto signature:
+
+```bash
+# .env: LOGTO_WEBHOOK_SKIP_VERIFY=true
+curl -s -X POST http://127.0.0.1:8084/internal/webhooks/logto \
+  -H "X-Internal-Token: dev-internal-token-change-me" \
+  -H "Content-Type: application/json" \
+  -d '{"hookId":"dev","event":"PostSignIn","createdAt":"2024-01-01T00:00:00.000Z","userId":"logto-u1"}'
+```
 
 ## Troubleshooting
 

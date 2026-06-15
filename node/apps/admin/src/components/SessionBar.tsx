@@ -1,7 +1,7 @@
 import { Alert, Button, Space, Typography } from 'antd';
 import { signInPath } from '../config/auth';
 import { useSession } from '../hooks/useSession';
-import { ApiError } from '../api/client';
+import { ApiError } from '@ting/api';
 
 export function SessionBar() {
   const me = useSession();
@@ -57,6 +57,12 @@ export function SessionBar() {
           <>
             {' '}
             · 租户 <Typography.Text code>{user.tenant_id}</Typography.Text>
+          </>
+        ) : null}
+        {user.roles?.length ? (
+          <>
+            {' '}
+            · 角色 <Typography.Text code>{user.roles.join(', ')}</Typography.Text>
           </>
         ) : null}
       </Typography.Text>

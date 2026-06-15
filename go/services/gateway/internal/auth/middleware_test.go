@@ -13,12 +13,13 @@ import (
 
 	"github.com/ting-boundless/boundless/pkg/auth"
 	"github.com/ting-boundless/boundless/pkg/identity"
+	"github.com/ting-boundless/boundless/pkg/revocation"
 	"github.com/ting-boundless/boundless/services/gateway/internal/session"
 )
 
 func TestAuthenticate_StripsClientHeadersAndVerifiesJWT(t *testing.T) {
 	cfg := auth.Config{
-		Issuer:    "http://test/oidc",
+		Issuers:   []string{"http://test/oidc"},
 		Audience:  "ting-test",
 		DevSecret: "edge-secret",
 	}
@@ -44,7 +45,7 @@ func TestAuthenticate_StripsClientHeadersAndVerifiesJWT(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+tok)
 
 	rr := httptest.NewRecorder()
-	Authenticate(v, nil, DefaultAnonPrefixes())(next).ServeHTTP(rr, req)
+	Authenticate(v, nil, DefaultAnonPrefixes(), nil, nil, nil, SensitivePrefixes{})(next).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status %d body %s", rr.Code, rr.Body.String())
@@ -68,7 +69,7 @@ func TestAuthenticate_InvalidBearerReturns401(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer bad")
 
 	rr := httptest.NewRecorder()
-	Authenticate(v, nil, DefaultAnonPrefixes())(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(rr, req)
+	Authenticate(v, nil, DefaultAnonPrefixes(), nil, nil, nil, SensitivePrefixes{})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(rr, req)
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("status %d", rr.Code)
 	}
@@ -85,7 +86,7 @@ func TestAuthenticate_SessionCookie(t *testing.T) {
 	sessions := session.NewStore(rdb)
 
 	cfg := auth.Config{
-		Issuer:    "http://test/oidc",
+		Issuers:   []string{"http://test/oidc"},
 		Audience:  "ting-test",
 		DevSecret: "cookie-secret",
 	}
@@ -122,7 +123,7 @@ func TestAuthenticate_SessionCookie(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: sessions.CookieName(), Value: sid})
 
 	rr := httptest.NewRecorder()
-	Authenticate(v, sessions, DefaultAnonPrefixes())(next).ServeHTTP(rr, req)
+	Authenticate(v, sessions, DefaultAnonPrefixes(), nil, nil, nil, SensitivePrefixes{})(next).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status %d body %s", rr.Code, rr.Body.String())
@@ -141,7 +142,7 @@ func TestAuthenticate_NonAnonWithoutCredentialsReturns401(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/business/me", nil)
 	rr := httptest.NewRecorder()
-	Authenticate(v, nil, DefaultAnonPrefixes())(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	Authenticate(v, nil, DefaultAnonPrefixes(), nil, nil, nil, SensitivePrefixes{})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("next should not run")
 	})).ServeHTTP(rr, req)
 
@@ -160,7 +161,7 @@ func TestAuthenticate_AnonPathAllowsWithoutCredentials(t *testing.T) {
 	called := false
 	req := httptest.NewRequest(http.MethodGet, "/v1/business/ping", nil)
 	rr := httptest.NewRecorder()
-	Authenticate(v, nil, DefaultAnonPrefixes())(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	Authenticate(v, nil, DefaultAnonPrefixes(), nil, nil, nil, SensitivePrefixes{})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
 		w.WriteHeader(http.StatusOK)
 	})).ServeHTTP(rr, req)
@@ -170,5 +171,123 @@ func TestAuthenticate_AnonPathAllowsWithoutCredentials(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("expected next handler to run for anonymous whitelist path")
+	}
+}
+
+func TestAuthenticate_SignInDevRequiresAuthWhenNotInWhitelist(t *testing.T) {
+	cfg := auth.Config{DevSecret: "s"}
+	v, err := auth.NewVerifier(t.Context(), cfg, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/sign-in/dev", nil)
+	rr := httptest.NewRecorder()
+	Authenticate(v, nil, DefaultAnonPrefixes(), nil, nil, nil, SensitivePrefixes{})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("next should not run without dev anon rule")
+	})).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status %d body %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestAuthenticate_SignInDevAllowedWithDevWhitelist(t *testing.T) {
+	cfg := auth.Config{DevSecret: "s"}
+	v, err := auth.NewVerifier(t.Context(), cfg, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rules := DefaultAnonPrefixes().withExact("/sign-in/dev")
+	called := false
+	req := httptest.NewRequest(http.MethodGet, "/sign-in/dev", nil)
+	rr := httptest.NewRecorder()
+	Authenticate(v, nil, rules, nil, nil, nil, SensitivePrefixes{})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK || !called {
+		t.Fatalf("status %d called=%v", rr.Code, called)
+	}
+}
+
+func TestAuthenticate_RevokedSubjectOnSensitivePath(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mr.Close()
+
+	rdb := goredis.NewClient(&goredis.Options{Addr: mr.Addr()})
+	revocations := revocation.NewStore(rdb)
+
+	cfg := auth.Config{
+		Issuers:   []string{"http://test/oidc"},
+		Audience:  "ting-test",
+		DevSecret: "edge-secret",
+	}
+	v, err := auth.NewVerifier(t.Context(), cfg, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tok, err := auth.DevToken(cfg, "revoked-user", "t1", nil, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := revocations.RevokeSubject(t.Context(), "revoked-user"); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/files/upload", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+
+	rr := httptest.NewRecorder()
+	Authenticate(v, nil, DefaultAnonPrefixes(), nil, nil, revocations, DefaultSensitivePrefixes())(
+		http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("next should not run") }),
+	).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status %d body %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestAuthenticate_RevokedSubjectAllowedOnNonSensitivePath(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mr.Close()
+
+	rdb := goredis.NewClient(&goredis.Options{Addr: mr.Addr()})
+	revocations := revocation.NewStore(rdb)
+
+	cfg := auth.Config{DevSecret: "edge-secret"}
+	v, err := auth.NewVerifier(t.Context(), cfg, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tok, err := auth.DevToken(cfg, "revoked-user", "t1", nil, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := revocations.RevokeSubject(t.Context(), "revoked-user"); err != nil {
+		t.Fatal(err)
+	}
+
+	called := false
+	req := httptest.NewRequest(http.MethodGet, "/v1/users/me", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+
+	rr := httptest.NewRecorder()
+	Authenticate(v, nil, DefaultAnonPrefixes(), nil, nil, revocations, DefaultSensitivePrefixes())(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true; w.WriteHeader(http.StatusOK) }),
+	).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK || !called {
+		t.Fatalf("status %d called=%v", rr.Code, called)
 	}
 }

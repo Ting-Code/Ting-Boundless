@@ -6,11 +6,12 @@ import { HealthModule } from './common/health/health.module';
 import { GatewayTrustMiddleware } from './common/gateway/gateway-trust.middleware';
 import { IdentityMiddleware } from './common/identity/identity.middleware';
 import { DrizzleModule } from './db/drizzle.module';
+import { MqModule } from './common/mq/mq.module';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
-import { LoggingInterceptor } from '@ting/logger';
+import { LoggingInterceptor, TraceContextMiddleware } from '@ting/logger';
 
 @Module({
-  imports: [DrizzleModule, HealthModule, BusinessModule, ItemsModule],
+  imports: [DrizzleModule, MqModule, HealthModule, BusinessModule, ItemsModule],
   providers: [
     {
       provide: APP_FILTER,
@@ -24,6 +25,8 @@ import { LoggingInterceptor } from '@ting/logger';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(GatewayTrustMiddleware, IdentityMiddleware).forRoutes('*');
+    consumer
+      .apply(TraceContextMiddleware, GatewayTrustMiddleware, IdentityMiddleware)
+      .forRoutes('*');
   }
 }

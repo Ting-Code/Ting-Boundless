@@ -14,17 +14,22 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/ting-boundless/boundless/pkg/audit"
 	"github.com/ting-boundless/boundless/pkg/auth"
 	"github.com/ting-boundless/boundless/pkg/cache"
 	"github.com/ting-boundless/boundless/pkg/config"
 	"github.com/ting-boundless/boundless/pkg/httpx"
 	"github.com/ting-boundless/boundless/pkg/logger"
 	"github.com/ting-boundless/boundless/pkg/oidc"
+	"github.com/ting-boundless/boundless/pkg/revocation"
 	"github.com/ting-boundless/boundless/services/gateway/internal/adminstatic"
 	gwauth "github.com/ting-boundless/boundless/services/gateway/internal/auth"
 	"github.com/ting-boundless/boundless/services/gateway/internal/bff"
+	"github.com/ting-boundless/boundless/services/gateway/internal/identityresolve"
 	"github.com/ting-boundless/boundless/services/gateway/internal/proxy"
+	"github.com/ting-boundless/boundless/services/gateway/internal/ratelimit"
 	"github.com/ting-boundless/boundless/services/gateway/internal/session"
+	"github.com/ting-boundless/boundless/services/gateway/internal/siteproxy"
 )
 
 const serviceName = "gateway"
@@ -49,7 +54,8 @@ func main() {
 
 	oidcCfg := oidc.ConfigFromEnv()
 	sessions := session.NewStore(rd.Client)
-	bffHandler := bff.New(oidcCfg, sessions, verifier, authCfg, log)
+	revocations := revocation.NewStore(rd.Client)
+	bffHandler := bff.New(oidcCfg, sessions, verifier, authCfg, revocations, log)
 
 	if oidcCfg.Ready() {
 		log.Info("oidc bff enabled", slog.String("redirect_uri", oidcCfg.RedirectURI))
@@ -60,24 +66,36 @@ func main() {
 	health := httpx.NewHealth()
 	cache.RegisterHealth(health, rd.Probe)
 
-	internalToken := httpx.Env("INTERNAL_API_TOKEN", "")
+	internalToken, ok := httpx.LoadInternalToken(log)
+	if !ok {
+		return
+	}
 
 	routes := proxy.Routes{
-		"/v1/users/":    httpx.Env("USER_SERVICE_URL", "http://127.0.0.1:8081"),
-		"/v1/business/": httpx.Env("BUSINESS_SERVICE_URL", "http://127.0.0.1:3005"),
-		"/v1/files/":    httpx.Env("FILE_SERVICE_URL", "http://127.0.0.1:8083"),
-		"/v1/auth/":     httpx.Env("AUTH_SERVICE_URL", "http://127.0.0.1:8084"),
+		"/v1/users/":           httpx.Env("USER_SERVICE_URL", "http://127.0.0.1:8081"),
+		"/v1/business/":        httpx.Env("BUSINESS_SERVICE_URL", "http://127.0.0.1:3005"),
+		"/v1/files/":           httpx.Env("FILE_SERVICE_URL", "http://127.0.0.1:8083"),
+		"/v1/auth/":            httpx.Env("AUTH_SERVICE_URL", "http://127.0.0.1:8084"),
+		"/v1/audit/":           httpx.Env("AUDIT_SERVICE_URL", "http://127.0.0.1:8085"),
+		"/internal/webhooks/":  httpx.Env("AUTH_SERVICE_URL", "http://127.0.0.1:8084"),
 	}
 	log.Info("upstream routes",
 		slog.String("users", routes["/v1/users/"]),
 		slog.String("business", routes["/v1/business/"]),
 		slog.String("files", routes["/v1/files/"]),
 		slog.String("auth", routes["/v1/auth/"]),
+		slog.String("audit", routes["/v1/audit/"]),
 	)
 
 	router, err := proxy.New(routes, log, internalToken)
 	if err != nil {
 		log.Error("failed to build proxy", slog.Any("error", err))
+		return
+	}
+
+	siteHandler, err := siteproxy.FromEnv(log)
+	if err != nil {
+		log.Error("site proxy init failed", slog.Any("error", err))
 		return
 	}
 
@@ -104,19 +122,45 @@ func main() {
 		log.Warn("admin spa disabled (build: cd node && pnpm --filter @ting/admin build)")
 	}
 
-	mux.Handle("/", router)
+	mux.Handle("/", siteproxy.ComposeAPIAndSite(router, siteHandler))
 
-	anonPrefixes := gwauth.AnonPrefixesFromEnv()
-	log.Info("anonymous path prefixes", slog.Int("count", len(anonPrefixes)))
+	anonPrefixes := gwauth.ResolveAnonPrefixes()
+	log.Info("anonymous path rules",
+		slog.Int("exact", len(anonPrefixes.ExactPaths())),
+		slog.Int("prefix", len(anonPrefixes.PrefixPaths())),
+	)
+
+	sensitivePrefixes := gwauth.ResolveSensitivePrefixes()
+	log.Info("sensitive path rules", slog.Int("prefix", len(sensitivePrefixes.PrefixPaths())))
+
+	identityResolver := identityresolve.FromEnv()
+
+	entryAudit := audit.NewAsync(audit.NewHTTPEmitter(audit.HTTPEmitterConfig{
+		BaseURL: httpx.Env("AUDIT_SERVICE_URL", "http://127.0.0.1:8085"),
+		Token:   internalToken,
+	}), log)
+	if entryAudit == nil {
+		log.Warn("AUDIT_SERVICE_URL not set; gateway entry audit events disabled")
+	}
+
+	rateCfg := ratelimit.ConfigFromEnv()
+	log.Info("rate limits",
+		slog.Bool("enabled", rateCfg.Enabled),
+		slog.Float64("auth_rps", rateCfg.AuthRPS),
+		slog.Float64("general_rps", rateCfg.GeneralRPS),
+		slog.Bool("redis", rd.Client != nil && httpx.Env("GATEWAY_RATE_LIMIT_REDIS", "true") != "false"),
+	)
 
 	h := httpx.Chain(mux,
-		gwauth.Authenticate(verifier, sessions, anonPrefixes),
+		ratelimit.Middleware(rateCfg, entryAudit, ratelimit.NewLimiter(rateCfg, rd.Client, log)),
+		gwauth.Authenticate(verifier, sessions, anonPrefixes, identityResolver, entryAudit, revocations, sensitivePrefixes),
 		httpx.Recover(log),
 		httpx.AccessLog(log),
+		httpx.TraceContext,
 	)
 
 	addr := httpx.Env("HTTP_ADDR", ":8080")
-	if err := httpx.New(addr, h, log).Run(); err != nil {
+	if err := httpx.RunService(addr, serviceName, h, log); err != nil {
 		log.Error("server error", slog.Any("error", err))
 	}
 }

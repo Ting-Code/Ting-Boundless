@@ -1,0 +1,224 @@
+openapi: 3.0.3
+info:
+  title: Ting Boundless File API
+  version: 1.0.0
+  description: File upload and access under /v1/files/* (Go file-service).
+
+servers:
+  - url: http://127.0.0.1:8080
+    description: Gateway (local)
+
+paths:
+  /v1/files/:
+    get:
+      operationId: listFiles
+      summary: List files owned by the current user
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFilesResponse'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+    post:
+      operationId: uploadFile
+      summary: Upload a file (multipart)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileRecord'
+        '400':
+          description: Invalid upload
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+
+  /v1/files/{id}:
+    get:
+      operationId: getFile
+      summary: Get file metadata
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileRecord'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+
+  /v1/files/{id}/download:
+    get:
+      operationId: downloadFile
+      summary: Stream file bytes from object storage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+
+  /v1/files/{id}/url:
+    get:
+      operationId: presignFileUrl
+      summary: Get a presigned download URL
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: expires
+          in: query
+          description: URL lifetime in seconds
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresignResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+
+components:
+  schemas:
+    FileRecord:
+      type: object
+      required:
+        - file_id
+        - tenant_id
+        - owner_id
+        - bucket
+        - object_key
+        - content_type
+        - size_bytes
+        - created_at
+      properties:
+        file_id:
+          type: string
+        tenant_id:
+          type: string
+        owner_id:
+          type: string
+        bucket:
+          type: string
+        object_key:
+          type: string
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+
+    ListFilesResponse:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileRecord'
+
+    PresignResponse:
+      type: object
+      required: [file_id, url, expires_at, method]
+      properties:
+        file_id:
+          type: string
+        url:
+          type: string
+          format: uri
+        expires_at:
+          type: string
+          format: date-time
+        method:
+          type: string
+          enum: [GET]

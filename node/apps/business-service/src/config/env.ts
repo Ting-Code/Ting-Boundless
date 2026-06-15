@@ -22,6 +22,24 @@ export function env(name: string, fallback = ''): string {
   return process.env[name] ?? fallback;
 }
 
+/** True when APP_ENV=production or REQUIRE_INTERNAL_TOKEN=true. */
+export function requireInternalToken(): boolean {
+  if (env('REQUIRE_INTERNAL_TOKEN') === 'true') {
+    return true;
+  }
+  return env('APP_ENV').trim().toLowerCase() === 'production';
+}
+
+/** Fails fast when production requires INTERNAL_API_TOKEN but it is unset. */
+export function assertInternalTokenConfigured(): void {
+  const token = env('INTERNAL_API_TOKEN').trim();
+  if (requireInternalToken() && token === '') {
+    throw new Error(
+      'INTERNAL_API_TOKEN is required when APP_ENV=production or REQUIRE_INTERNAL_TOKEN=true',
+    );
+  }
+}
+
 /** Align with go/pkg/config/placeholder.go — local dev values are not placeholders. */
 export function isPlaceholder(value: string): boolean {
   const v = value.trim().toLowerCase();

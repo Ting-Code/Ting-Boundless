@@ -37,12 +37,14 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
       args: { SERVICE: gateway }
-    depends_on: [user-service, file-service, auth-service]
+    depends_on: [user-service, file-service, auth-service, audit-service]
     environment:
       USER_SERVICE_URL: http://user-service:8081
       BUSINESS_SERVICE_URL: http://host.docker.internal:3005
       FILE_SERVICE_URL: http://file-service:8083
       AUTH_SERVICE_URL: http://auth-service:8084
+      AUDIT_SERVICE_URL: http://audit-service:8085
+      SITE_SERVICE_URL: http://host.docker.internal:3006
       REDIS_ADDR: redis:6379
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -81,6 +83,9 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
       args: { SERVICE: worker }
+    depends_on: [audit-service]
+    environment:
+      AUDIT_SERVICE_URL: http://audit-service:8085
 
   logto:
     image: ghcr.io/logto-io/logto:latest
@@ -97,8 +102,70 @@ services:
     restart: unless-stopped
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
+    image: otel/opentelemetry-collector-contrib:0.120.0
     command: ["--config=/etc/otel/collector.yaml"]
+    depends_on:
+      tempo:
+        condition: service_started
+      loki:
+        condition: service_started
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "8889:8889"
     volumes:
       - ./otel/collector.yaml:/etc/otel/collector.yaml:ro
     restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.7.2
+    command: ["-config.file=/etc/tempo.yaml"]
+    ports:
+      - "3200:3200"
+    volumes:
+      - ./otel/tempo.yaml:/etc/tempo.yaml:ro
+      - tempodata:/var/tempo
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3200/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.4.2
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./otel/loki.yaml:/etc/loki/loki.yaml:ro
+      - lokidata:/loki
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.5.0
+    depends_on:
+      tempo:
+        condition: service_started
+      loki:
+        condition: service_started
+      otel-collector:
+        condition: service_started
+    ports:
+      - "3003:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./otel/grafana/provisioning:/etc/grafana/provisioning:ro
+    restart: unless-stopped
+
+volumes:
+  tempodata:
+  lokidata:

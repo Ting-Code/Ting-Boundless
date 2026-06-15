@@ -15,3 +15,38 @@ export function traceIdFromParent(traceparent: string | undefined): string {
   }
   return parts[1].toLowerCase();
 }
+
+function pickHeader(
+  headers: Record<string, string | string[] | undefined>,
+  key: string,
+): string {
+  const raw = headers[key];
+  if (Array.isArray(raw)) {
+    return raw[0] ?? '';
+  }
+  return raw ?? '';
+}
+
+/** Create a W3C traceparent for a new root span. */
+export function newTraceparent(): string {
+  const traceId = crypto.randomUUID().replace(/-/g, '');
+  const spanId = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+  return `00-${traceId}-${spanId}-01`;
+}
+
+/**
+ * Ensure the request has traceparent (preserve inbound, generate if missing)
+ * and mirror it on the response for correlation.
+ */
+export function ensureTraceparent(
+  req: { headers: Record<string, string | string[] | undefined> },
+  res: { setHeader(name: string, value: string): void },
+): string {
+  let tp = pickHeader(req.headers, HEADER_TRACEPARENT);
+  if (!tp) {
+    tp = newTraceparent();
+    req.headers[HEADER_TRACEPARENT] = tp;
+  }
+  res.setHeader(HEADER_TRACEPARENT, tp);
+  return tp;
+}

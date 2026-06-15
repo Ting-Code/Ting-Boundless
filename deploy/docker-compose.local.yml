@@ -1,0 +1,52 @@
+# Local dev startup ordering — merge with infra + apps only (make up).
+# Not used in production (managed Postgres/Redis/MQ).
+
+name: ting-boundless
+
+x-depends-datastores: &depends-datastores
+  postgres:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+
+services:
+  gateway:
+    depends_on:
+      <<: *depends-datastores
+      user-service:
+        condition: service_started
+      file-service:
+        condition: service_started
+      auth-service:
+        condition: service_started
+
+  auth-service:
+    depends_on:
+      <<: *depends-datastores
+
+  user-service:
+    depends_on:
+      <<: *depends-datastores
+
+  file-service:
+    depends_on:
+      <<: *depends-datastores
+
+  audit-service:
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      audit-service:
+        condition: service_started
+
+  logto:
+    depends_on:
+      postgres:
+        condition: service_healthy

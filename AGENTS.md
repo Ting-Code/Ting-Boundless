@@ -31,7 +31,7 @@ go/                  Go monorepo (module root: go/go.mod)
   migrations/        SQL migrations per Go service
 node/                pnpm monorepo — all Node/TypeScript (apps + packages)
   apps/              business-service (Nest), admin (Vite), site (Next.js)
-  packages/          api-types, api-client (from OpenAPI)
+  packages/          api (from OpenAPI)
 deploy/              docker-compose (apps + infra split), nginx, otel collector
 docs/                architecture docs (full chain in ARCHITECTURE.md § End-to-End Request Chain)
 .cursor/             rules + skills
@@ -40,7 +40,7 @@ docs/                architecture docs (full chain in ARCHITECTURE.md § End-to-
 ## Language split
 
 - **Go** (`go/services/`): gateway, auth-service, audit-service, user-service, file-service, worker — platform logic only once.
-- **TypeScript** (`node/`): Nest `@ting/business-service` for domain CRUD under `/v1/business/*`; `@ting/admin` and `@ting/site` for frontends; share `@ting/api-types`; never duplicate OIDC in Nest or Next.
+- **TypeScript** (`node/`): **V1 = Web 后台** — `@ting/admin` + `@ting/business-service` + `@ting/api`（cookie BFF）；小程序/App TS 客户端与 `@ting/site` 打磨延后。
 
 Domain CRUD belongs in `node/apps/business-service`, not new Go services, unless explicitly approved.
 
@@ -52,6 +52,8 @@ required structure and baseline (health, logging, identity, audit, Dockerfile).
 ## Build / verify
 
 ```
+make proto         # buf lint + generate -> go/gen/go/ (required before go test if protos changed)
+make generate-api  # OpenAPI -> @ting/api
 make build        # cd go && go build ./...
 make vet
 make test
@@ -59,5 +61,5 @@ make run-gateway   # cd go && go run ./services/gateway
 make run-business  # Nest business-service :3005
 make run-admin     # Vite admin :5173
 make node-install  # pnpm install in node/
-make node-build    # build api-types + business-service
+make node-build    # build @ting/api + business-service
 ```

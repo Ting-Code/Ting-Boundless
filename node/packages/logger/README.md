@@ -16,3 +16,14 @@ Logger.overrideLogger(createNestLoggerAdapter());
 ```
 
 Access logs use `message=http_request` with `request_id`, `trace_id`, and normalized `url.path`.
+
+## OpenTelemetry (`@ting/logger/otel`)
+
+```typescript
+// instrument.ts — import first in main.ts
+import { initOtelFromEnv } from '@ting/logger/otel';
+initOtelFromEnv('my-service');
+```
+
+Requires `OTEL_EXPORTER_OTLP_ENDPOINT` (disabled when unset). When enabled, traces export via
+the Node SDK and application logs fan out to OTLP (`OTEL_LOGS_EXPORTER=none` to disable log export only).

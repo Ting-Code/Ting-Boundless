@@ -1,22 +1,44 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CreateItemRequest, ListItemsResponse } from '@ting/api-types';
-import { Alert, Button, Card, Form, Input, Space, Table, Typography, message } from 'antd';
-import { apiFetch, ApiError } from '../api/client';
+import {
+  apiFetch,
+  ApiError,
+  businessPaths,
+  type BusinessItem,
+  type CreateItemRequest,
+  type ListItemsResponse,
+  type UpdateItemRequest,
+} from '@ting/api';
+import {
+  Alert,
+  Button,
+  Card,
+  Form,
+  Input,
+  Modal,
+  Popconfirm,
+  Space,
+  Table,
+  Typography,
+  message,
+} from 'antd';
+import { useState } from 'react';
 import { signInPath } from '../config/auth';
 import { handleAuthError } from '../hooks/useSession';
 
 export function ItemsPage() {
   const queryClient = useQueryClient();
   const [form] = Form.useForm<CreateItemRequest>();
+  const [editForm] = Form.useForm<UpdateItemRequest>();
+  const [editing, setEditing] = useState<BusinessItem | null>(null);
 
   const itemsQuery = useQuery({
     queryKey: ['business', 'items'],
-    queryFn: () => apiFetch<ListItemsResponse>('/v1/business/items'),
+    queryFn: () => apiFetch<ListItemsResponse>(businessPaths.items),
   });
 
   const createMutation = useMutation({
     mutationFn: (body: CreateItemRequest) =>
-      apiFetch('/v1/business/items', {
+      apiFetch(businessPaths.items, {
         method: 'POST',
         body: JSON.stringify(body),
       }),
@@ -33,6 +55,47 @@ export function ItemsPage() {
       message.error(msg);
     },
   });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: UpdateItemRequest }) =>
+      apiFetch(businessPaths.item(id), {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      message.success('已更新');
+      setEditing(null);
+      void queryClient.invalidateQueries({ queryKey: ['business', 'items'] });
+    },
+    onError: (err: unknown) => {
+      if (handleAuthError(err)) {
+        return;
+      }
+      const msg = err instanceof ApiError ? err.message : '更新失败';
+      message.error(msg);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(businessPaths.item(id), { method: 'DELETE' }),
+    onSuccess: () => {
+      message.success('已删除');
+      void queryClient.invalidateQueries({ queryKey: ['business', 'items'] });
+    },
+    onError: (err: unknown) => {
+      if (handleAuthError(err)) {
+        return;
+      }
+      const msg = err instanceof ApiError ? err.message : '删除失败';
+      message.error(msg);
+    },
+  });
+
+  const openEdit = (item: BusinessItem) => {
+    setEditing(item);
+    editForm.setFieldsValue({ title: item.title, body: item.body });
+  };
 
   if (itemsQuery.isError && handleAuthError(itemsQuery.error)) {
     return null;
@@ -106,10 +169,53 @@ export function ItemsPage() {
                 width: 200,
                 render: (v: string) => new Date(v).toLocaleString(),
               },
+              {
+                title: '操作',
+                width: 140,
+                render: (_: unknown, row: BusinessItem) => (
+                  <Space size="small">
+                    <Button type="link" size="small" onClick={() => openEdit(row)}>
+                      编辑
+                    </Button>
+                    <Popconfirm
+                      title="删除此条目？"
+                      onConfirm={() => deleteMutation.mutate(row.id)}
+                    >
+                      <Button type="link" size="small" danger loading={deleteMutation.isPending}>
+                        删除
+                      </Button>
+                    </Popconfirm>
+                  </Space>
+                ),
+              },
             ]}
           />
         )}
       </Card>
+
+      <Modal
+        title="编辑条目"
+        open={editing !== null}
+        onCancel={() => setEditing(null)}
+        onOk={() => {
+          void editForm.validateFields().then((values) => {
+            if (editing) {
+              updateMutation.mutate({ id: editing.id, body: values });
+            }
+          });
+        }}
+        confirmLoading={updateMutation.isPending}
+        destroyOnClose
+      >
+        <Form form={editForm} layout="vertical">
+          <Form.Item name="title" label="标题" rules={[{ required: true, message: '请输入标题' }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="body" label="备注">
+            <Input.TextArea rows={3} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </Space>
   );
 }

@@ -6,7 +6,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import type { ErrorEnvelope } from '@ting/api-types';
+import type { ErrorEnvelope } from '@ting/api';
 import { IDENTITY_REQUEST_KEY, type RequestWithIdentity } from '../identity/identity.middleware';
 
 @Catch()

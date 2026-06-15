@@ -16,11 +16,11 @@ func InternalAuth(token string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			rid := r.Header.Get(identity.HeaderRequestID)
 			if token == "" {
-				errs.Write(w, rid, errs.Internal("internal_auth_misconfigured", "internal auth not configured"))
+				WriteError(w, rid, errs.Internal("internal_auth_misconfigured", "internal auth not configured"))
 				return
 			}
 			if !internalTokenOK(r, token) {
-				errs.Write(w, rid, errs.Unauthorized("unauthorized", "invalid internal token"))
+				WriteError(w, rid, errs.Unauthorized("unauthorized", "invalid internal token"))
 				return
 			}
 			next.ServeHTTP(w, r)

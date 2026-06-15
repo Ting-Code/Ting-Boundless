@@ -23,7 +23,10 @@ var services = []struct {
 	db   string
 }{
 	{name: "user-service", db: ""},
+	{name: "auth-service", db: ""},
+	{name: "file-service", db: ""},
 	{name: "audit-service", db: auditDatabase()},
+	{name: "worker-service", db: ""},
 }
 
 func main() {

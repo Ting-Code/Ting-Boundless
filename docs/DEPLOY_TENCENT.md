@@ -102,17 +102,40 @@ Push to `main` 后自动：测试 → 构建 8 个镜像 → CVM 上 `docker com
 ## 6. Production `.env` highlights
 
 ```env
+APP_ENV=production
 GATEWAY_PUBLIC_URL=https://api.example.com
 OIDC_REDIRECT_URI=https://api.example.com/callback
 GATEWAY_BFF_DEV_LOGIN=false
-INTERNAL_API_TOKEN=<strong-random>
+INTERNAL_API_TOKEN=<strong-random>   # required; services reject traffic without Gateway token
 
 POSTGRES_HOST=<tencentdb-host>
 POSTGRES_SSLMODE=require
 REDIS_ADDR=<redis-host>:6379
+RABBITMQ_URL=amqp://<user>:<pass>@<mq-host>:5672/   # optional; worker async jobs
 
 S3_ENDPOINT=https://cos.<region>.myqcloud.com
 ```
+
+### Observability (optional on CVM)
+
+Point services at an OTLP collector (self-host `make up-obs` stack, or vendor APM):
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=http://<collector>:4317
+OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+OTEL_LOGS_EXPORTER=otlp
+```
+
+Go services export traces + logs; Grafana/Tempo/Loki setup: `deploy/otel/README.md`.
+
+### Security checklist
+
+| Item | Production |
+|------|------------|
+| `INTERNAL_API_TOKEN` | Set on Gateway + all business services |
+| `APP_ENV=production` or `REQUIRE_INTERNAL_TOKEN=true` | Fails startup if token missing |
+| `GATEWAY_BFF_DEV_LOGIN` | `false` |
+| TencentDB / Redis | Private VPC; not public internet |
 
 ## 7. WeChat mini-program
 
@@ -128,7 +151,10 @@ S3_ENDPOINT=https://cos.<region>.myqcloud.com
 | CVM pull 慢 | TCR 与 CVM 同地域 |
 | Gateway 502 business | `BUSINESS_SERVICE_URL=http://business-service:3005` in prod compose |
 | OIDC redirect mismatch | Logto 应用回调与 `OIDC_REDIRECT_URI` 完全一致（https） |
-| 直连 Nest 伪造身份 | 生产必须设 `INTERNAL_API_TOKEN` |
+| 直连 Nest 伪造身份 | 生产必须设 `INTERNAL_API_TOKEN` + `APP_ENV=production` |
+| RabbitMQ 连接失败 | `RABBITMQ_URL`、安全组 5672、worker `/readyz` |
+| Worker 不消费任务 | worker 日志 `rabbitmq consumer started`；`make enqueue-ping` 冒烟 |
+| 无 trace/log | `OTEL_EXPORTER_OTLP_ENDPOINT` 指向 collector；CVM 开放 4317 内网 |
 
 ## 9. Optional upgrades
 

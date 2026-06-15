@@ -1,0 +1,13 @@
+# Redocly lint for platform-contracts/openapi/*.yaml
+extends:
+  - recommended
+
+rules:
+  # Domain specs reference each other via relative $ref (common.v1.yaml).
+  no-unresolved-refs: error
+  security-defined: off
+  info-license: off
+  # file-service registers POST/GET on /v1/files/ (trailing slash) in Go mux.
+  no-path-trailing-slash: off
+  # common.v1.yaml components are referenced from sibling domain specs.
+  no-unused-components: off

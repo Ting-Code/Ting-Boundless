@@ -2,7 +2,7 @@
 
 ## One-Sentence Architecture
 
-Nginx guards the edge, Go Gateway/BFF owns shared request logic (identity, routing, BFF cookies) without duplication, Logto owns identity through OIDC/JWKS, Go services own platform capabilities (auth integration, audit, user, file, worker), NestJS + Drizzle owns domain CRUD in TypeScript, Next.js serves SSR web and Vite serves the admin SPA, platform-contracts and generated `node/packages/api-types` keep cross-language behavior and shared TS types consistent, Python is reserved for heavy AI/data pipelines, OpenTelemetry makes the system observable, CloudEvents audit events flow into Audit Service, and PostgreSQL/Redis/RabbitMQ/S3 form the infrastructure base.
+Nginx guards the edge, Go Gateway/BFF owns shared request logic (identity, routing, BFF cookies) without duplication, Logto owns identity through OIDC/JWKS, Go services own platform capabilities (auth integration, audit, user, file, worker), NestJS + Drizzle owns domain CRUD in TypeScript, Next.js serves SSR web and Vite serves the admin SPA, platform-contracts and generated `node/packages/api` keep cross-language behavior and shared TS types consistent, Python is reserved for heavy AI/data pipelines, OpenTelemetry makes the system observable, CloudEvents audit events flow into Audit Service, and PostgreSQL/Redis/RabbitMQ/S3 form the infrastructure base.
 
 ## Memory Model
 
@@ -319,7 +319,7 @@ TypeScript (domain CRUD + web UI) — all under node/ pnpm monorepo:
   node/apps/business-service (NestJS + Drizzle)
   node/apps/site (Next.js)
   node/apps/admin (Vite + React)
-  node/packages/api-types (shared types)
+  node/packages/api (shared types)
 
 Python (heavy AI/data, when needed):
   batch pipelines, training, embeddings at scale
@@ -403,7 +403,7 @@ node/apps/admin (Vite + React, @ting/admin):
   Ant Design (or equivalent) for tables and forms
   TanStack Query for server state against /v1
   credentials: include for Cookie sessions
-  types from @ting/api-types (generated from platform-contracts)
+  types from @ting/api (generated from platform-contracts)
 ```
 
 Static admin assets can be served by Nginx without a Node runtime. Next.js requires a
@@ -517,8 +517,8 @@ Ting-Boundless/
       site/               Next.js SSR (@ting/site)
       admin/              Vite + React SPA (@ting/admin)
     packages/
-      api-types/          generated TS from OpenAPI (@ting/api-types)
-      api-client/         optional orval + TanStack Query (@ting/api-client)
+      api/                  paths + types + request helpers (@ting/api)
+      logger/             ECS JSON + OTLP (@ting/logger)
   go/                     Go monorepo (go.mod lives here)
     pkg/                  shared libraries
     services/             gateway, auth, audit, user, file, worker
@@ -540,10 +540,12 @@ Ting-Boundless/
 | `/v1/auth/*` | `auth-service` (via Gateway) | Public login/SMS integration; nginx stricter rate limit |
 | `/healthz`, `/readyz`, `/metrics` | each service | Liveness/readiness per service |
 
-**Gateway anonymous prefixes** (`GATEWAY_ANON_PREFIXES`): paths that may pass without
-end-user credentials (health, BFF `/sign-in*`, `/admin` static, `/v1/business/ping`,
-`/v1/auth/*`). All other `/v1/*` requests without a valid cookie or Bearer JWT are
-rejected at the Gateway (`401 auth.unauthenticated`), not in business services.
+**Gateway anonymous paths** (`GATEWAY_ANON_PREFIXES`): paths that may pass without
+end-user credentials. Rules use **exact** (`=/sign-in`) or **prefix** (`/admin`) match;
+see `go/services/gateway/README.md`. Defaults cover health, BFF OIDC (`/sign-in`,
+`/callback`, `/sign-out` exact only), `/admin` static, `/v1/business/ping`, `/v1/auth/*`.
+`/sign-in/dev` is allowed only when `GATEWAY_BFF_DEV_LOGIN=true`. All other `/v1/*`
+without a valid cookie or Bearer JWT are rejected at the Gateway (`401 auth.unauthenticated`).
 
 **Internal trust**: Gateway injects `X-Internal-Token` on upstream proxy requests;
 business and platform services reject forged identity headers without it (`INTERNAL_API_TOKEN`).
@@ -563,7 +565,7 @@ and must not be exposed directly to the public internet.
 7. Nest Identity guard reads X-User-Id, X-Tenant-Id, X-Roles, etc.
 8. Nest enforces domain authorization, runs Drizzle transaction (business row + outbox).
 9. JSON response uses the unified error envelope from platform-contracts.
-10. TanStack Query in admin caches and revalidates using @ting/api-types shapes.
+10. TanStack Query in admin caches and revalidates using @ting/api shapes.
 ```
 
 ### Next SSR Chain
@@ -601,9 +603,9 @@ and must not be exposed directly to the public internet.
 ```text
 1. Edit platform-contracts OpenAPI for external /v1 REST (business domain first).
 2. CI: buf lint/breaking for proto; OpenAPI lint/breaking for REST.
-3. Generate @ting/api-types in node/packages/api-types (openapi-typescript or orval).
-4. Nest controllers and DTO validation align with api-types.
-5. node/apps/admin and node/apps/site import the same @ting/api-types package.
+3. Generate @ting/api in node/packages/api (openapi-typescript).
+4. Nest controllers and DTO validation align with `@ting/api`.
+5. node/apps/admin and node/apps/site import the same @ting/api package.
 6. Drizzle schema types stay inside node/apps/business-service; map db rows to API DTOs in the service layer.
 7. make proto generates Go types for identity, error, audit, and V2 gRPC services.
 ```
@@ -663,7 +665,7 @@ Dispatcher/worker → audit-service → audit_db.
 5. cd node && pnpm dev:business           # Nest :3001
 6. cd node && pnpm dev:admin              # Vite, proxy /v1 → Gateway
 7. cd node && pnpm dev:site               # Next, API calls via Gateway
-8. cd node && pnpm generate:api-types     # after OpenAPI changes
+8. cd node && pnpm generate:api     # after OpenAPI changes
 ```
 
 ### Phased Rollout
@@ -671,7 +673,7 @@ Dispatcher/worker → audit-service → audit_db.
 | Phase | Goal | Prove |
 |-------|------|-------|
 | P0 | Gateway real JWT/Cookie BFF; fix middleware order | Login → cookie → identity headers |
-| P1 | Nest + Drizzle first resource; OpenAPI + api-types | Admin list/create/update/delete |
+| P1 | Nest + Drizzle first resource; OpenAPI + `@ting/api` | Admin list/create/update/delete |
 | P2 | user-service `/v1/users/me` | Admin shows current user |
 | P3 | Next SSR pages (1–2) | Same cookie on public SSR |
 | P4 | Outbox + audit minimal loop | Business write produces audit record |
@@ -869,24 +871,34 @@ service -> outbox -> RabbitMQ -> Audit Service -> PostgreSQL audit_db
 
 ### Audit Sources And Delivery
 
-Audit events come from three sources, and the Transactional Outbox only applies to events tied to a business DB write. The others use lighter delivery.
+Audit events come from three sources. V1 uses **different delivery paths by design**; all converge on
+`audit-service` → `audit_db`.
+
+| Source | Examples | Producer | Delivery (V1) | `source` field |
+|--------|----------|----------|---------------|----------------|
+| Identity | `user.login.success`, `user.created` | auth-service (Logto webhook, mini-program login) | HTTP POST `audit-service` (`pkg/audit` HTTPEmitter) | `idp` |
+| Entry | `api.access.denied`, `api.rate_limited`, `api.token.invalid` | gateway | Async HTTP (`audit.NewAsync` + HTTPEmitter); no outbox | `gateway` |
+| Domain | `business.item.created`, … | business-service (Nest) | **Transactional outbox** in `app_db` → worker poll → HTTP audit | `business-service` |
+
+Additional async path (non-audit): Nest may publish `business.item.created` jobs to RabbitMQ for
+worker side-effects; audit for domain writes still flows through the outbox → worker → audit-service
+path above.
 
 ```text
-1. Identity events (user.login.success/failed, user.logout)
-   source: Logto webhook -> auth-service; mini-program login from auth-service code2session
-   reason: mobile login bypasses the Gateway, so login audit cannot rely on the Gateway
-   delivery: auth-service (may use its own outbox) -> Audit Service
+1. Identity events
+   Logto webhook / mini-program login -> auth-service -> POST audit-service (sync HTTP per event)
 
-2. Entry events (api.access.denied, api.rate_limited, api.token.invalid)
-   source: Gateway (no business DB transaction)
-   delivery: async emit, directly or via queue (no outbox)
+2. Entry events
+   Gateway edge -> async goroutine -> POST audit-service (fire-and-forget)
 
-3. Domain events (resource.delete, payment.refund, ...)
-   source: business services, tied to a business write
-   delivery: Transactional Outbox (same transaction) -> dispatch -> Audit Service
+3. Domain events
+   Nest transaction: business row + business_outbox row
+   worker polls outbox -> POST audit-service -> mark published_at
 ```
 
-The CloudEvents `source` field distinguishes idp / gateway / service origins.
+The CloudEvents `source` field distinguishes idp / gateway / service origins. Mini-program login
+audit cannot rely on the Gateway (mobile calls auth-service directly), so auth-service emits
+identity audit itself.
 
 ## Data Infrastructure
 
@@ -1023,7 +1035,7 @@ auth-service (IdP integration)
 Go platform services (user, file, audit, worker)
 NestJS business-service + Drizzle
 node/apps/site (Next.js) + node/apps/admin (Vite)
-node/packages/api-types generated from platform-contracts OpenAPI
+node/packages/api generated from platform-contracts OpenAPI
 PostgreSQL (managed or local infra compose for dev)
 Redis
 RabbitMQ
@@ -1073,7 +1085,7 @@ Logto for identity.
 Go Gateway/BFF for all shared request logic (no duplicate auth in Nest or Next).
 Go for platform services (gateway, auth, audit, user, file, worker).
 NestJS + Drizzle for domain CRUD in business-service.
-Next.js for SSR web; Vite + React for admin SPA; TanStack Query + @ting/api-types in node/ monorepo.
+Next.js for SSR web; Vite + React for admin SPA; TanStack Query + @ting/api in node/ monorepo.
 Python only for heavy AI/data pipelines when clearly needed.
 platform-contracts (OpenAPI + proto) for cross-language consistency and shared TS types.
 HTTP /v1 for all external and V1 internal traffic; gRPC in V2 for hot internal paths.

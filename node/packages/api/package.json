@@ -1,0 +1,25 @@
+{
+  "name": "@ting/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared API paths, OpenAPI-generated types, and browser fetch helpers",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "generate": "openapi-typescript ../../../platform-contracts/openapi/common.v1.yaml -o ./src/generated/common.v1.ts && openapi-typescript ../../../platform-contracts/openapi/business.v1.yaml -o ./src/generated/business.v1.ts && openapi-typescript ../../../platform-contracts/openapi/users.v1.yaml -o ./src/generated/users.v1.ts && openapi-typescript ../../../platform-contracts/openapi/files.v1.yaml -o ./src/generated/files.v1.ts && openapi-typescript ../../../platform-contracts/openapi/audit.v1.yaml -o ./src/generated/audit.v1.ts",
+    "build": "pnpm run generate && tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.8.0",
+    "typescript": "^5.8.2"
+  }
+}

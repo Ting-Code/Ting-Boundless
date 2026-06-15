@@ -44,6 +44,8 @@ type envelope struct {
 
 // Write serializes err as the unified error response. Non-*Error values are
 // treated as internal errors and the message is not leaked.
+//
+// Prefer httpx.WriteError in HTTP handlers so responses align with pkg/contracts.
 func Write(w http.ResponseWriter, requestID string, err error) {
 	e, ok := err.(*Error)
 	if !ok {

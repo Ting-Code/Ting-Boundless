@@ -25,7 +25,7 @@ Authoritative source: `docs/AI_CONTEXT.md` (read it for full rules).
   domain CRUD in `node/apps/business-service`. **No duplicate auth** in Nest,
   Next (`next-auth`), or a separate Node BFF.
 - **Frontends** (`node/apps/site` Next, `node/apps/admin` Vite) call Gateway `/v1` only;
-  share TS types via `node/packages/api-types` generated from `platform-contracts` OpenAPI.
+  share TS contract via `node/packages/api` (`@ting/api`) generated from `platform-contracts` OpenAPI.
 
 ## Layout
 

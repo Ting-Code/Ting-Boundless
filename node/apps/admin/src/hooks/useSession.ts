@@ -1,12 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import type { BusinessMeResponse } from '@ting/api-types';
-import { apiFetch, ApiError } from '../api/client';
+import { apiFetch, ApiError, businessPaths, type BusinessMeResponse } from '@ting/api';
 import { redirectToSignIn } from '../config/auth';
 
 export function useSession(_returnTo = '/admin/items') {
   return useQuery({
     queryKey: ['business', 'me'],
-    queryFn: () => apiFetch<BusinessMeResponse>('/v1/business/me'),
+    queryFn: () => apiFetch<BusinessMeResponse>(businessPaths.me),
     retry: false,
   });
 }

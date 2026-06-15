@@ -44,4 +44,17 @@ if ($list -notmatch 'e2e-item') {
   throw "list should contain e2e-item"
 }
 
-Write-Host "OK: Gateway cookie -> business-service E2E passed."
+Write-Host "5. GET /v1/audit/events (admin role; needs audit-service + audit_db)..."
+$audit = curl.exe -sS -b $jar "$gateway/v1/audit/events?limit=5"
+Write-Host $audit
+if ($audit -match '"code"\s*:\s*"forbidden"') {
+  throw "audit forbidden — dev sign-in should default roles user,admin"
+}
+if ($audit -match '"code"\s*:\s*"database_unavailable"') {
+  throw "start audit-service (make run-audit) and run make migrate for audit_db"
+}
+if ($audit -notmatch '"events"') {
+  throw "expected events array in audit response"
+}
+
+Write-Host "OK: Gateway cookie -> business + audit E2E passed."

@@ -8,6 +8,10 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+
+	"github.com/ting-boundless/boundless/pkg/errs"
+	"github.com/ting-boundless/boundless/pkg/httpx"
+	"github.com/ting-boundless/boundless/pkg/identity"
 )
 
 // Routes maps a path prefix to an upstream base URL.
@@ -22,6 +26,7 @@ type Router struct {
 
 // New builds a Router from the route table. When internalToken is non-empty, each
 // proxied request receives X-Internal-Token so upstreams can trust Gateway traffic.
+// Client traceparent and other hop headers are forwarded unchanged by the reverse proxy.
 func New(routes Routes, log *slog.Logger, internalToken string) (*Router, error) {
 	r := &Router{proxies: make(map[string]*httputil.ReverseProxy), log: log}
 	for prefix, target := range routes {
@@ -55,5 +60,5 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 	}
-	http.Error(w, `{"error":{"code":"not_found","message":"no route"}}`, http.StatusNotFound)
+	httpx.WriteError(w, req.Header.Get(identity.HeaderRequestID), errs.NotFound("route.not_found", "no route"))
 }

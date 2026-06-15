@@ -10,7 +10,8 @@ import (
 
 // GatewayTrust rejects external callers that lack the shared internal token.
 // Health probes and /internal/* (separate InternalAuth) are exempt.
-// When token is empty (local dev), the check is skipped.
+// When token is empty in dev, the check is skipped; production requires a token
+// via httpx.LoadInternalToken (APP_ENV=production or REQUIRE_INTERNAL_TOKEN=true).
 func GatewayTrust(token string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -20,7 +21,7 @@ func GatewayTrust(token string) func(http.Handler) http.Handler {
 			}
 			rid := r.Header.Get(identity.HeaderRequestID)
 			if !internalTokenOK(r, token) {
-				errs.Write(w, rid, errs.Unauthorized("untrusted_caller", "request must come through Gateway"))
+				WriteError(w, rid, errs.Unauthorized("untrusted_caller", "request must come through Gateway"))
 				return
 			}
 			next.ServeHTTP(w, r)

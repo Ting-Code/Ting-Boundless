@@ -11,13 +11,16 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/ting-boundless/boundless/pkg/otel"
 )
 
 // Server wraps http.Server with graceful shutdown.
 type Server struct {
-	addr string
-	log  *slog.Logger
-	http *http.Server
+	addr            string
+	log             *slog.Logger
+	http            *http.Server
+	otelShutdown    func(context.Context) error
 }
 
 // New creates a Server listening on addr with the given handler.
@@ -31,6 +34,12 @@ func New(addr string, handler http.Handler, log *slog.Logger) *Server {
 			ReadHeaderTimeout: 10 * time.Second,
 		},
 	}
+}
+
+// WithOtelShutdown registers an OpenTelemetry shutdown hook for graceful exit.
+func (s *Server) WithOtelShutdown(fn func(context.Context) error) *Server {
+	s.otelShutdown = fn
+	return s
 }
 
 // Run starts the server and blocks until SIGINT/SIGTERM, then shuts down
@@ -56,7 +65,40 @@ func (s *Server) Run() error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	if s.otelShutdown != nil {
+		if err := s.otelShutdown(shutdownCtx); err != nil {
+			s.log.Warn("otel shutdown", slog.Any("error", err))
+		}
+	}
 	return s.http.Shutdown(shutdownCtx)
+}
+
+// RunService starts a service with optional OpenTelemetry instrumentation.
+func RunService(addr, serviceName string, handler http.Handler, log *slog.Logger) error {
+	ctx := context.Background()
+	traceShutdown, err := otel.InitFromEnv(ctx, serviceName, log)
+	if err != nil {
+		return err
+	}
+	log, logShutdown, err := otel.AttachLogExport(ctx, serviceName, log)
+	if err != nil {
+		return err
+	}
+	slog.SetDefault(log)
+
+	shutdown := func(ctx context.Context) error {
+		var first error
+		if err := logShutdown(ctx); err != nil && first == nil {
+			first = err
+		}
+		if err := traceShutdown(ctx); err != nil && first == nil {
+			first = err
+		}
+		return first
+	}
+
+	handler = otel.WrapHandler(handler, serviceName)
+	return New(addr, handler, log).WithOtelShutdown(shutdown).Run()
 }
 
 // Env reads an environment variable with a fallback default.

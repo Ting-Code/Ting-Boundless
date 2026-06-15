@@ -4,7 +4,7 @@ NestJS + Drizzle domain service. Primary API under `/v1/business/*`.
 
 - Trusts **Gateway-injected identity headers** only (no end-user JWT parsing).
 - Exposes `/healthz`, `/readyz`, `/metrics` per platform baseline.
-- Uses `@ting/api-types` for shared response shapes.
+- Uses `@ting/api` for shared API types and paths.
 
 ## Endpoints (V1 scaffold)
 
@@ -16,7 +16,23 @@ NestJS + Drizzle domain service. Primary API under `/v1/business/*`.
 | GET | `/v1/business/ping` | Smoke test |
 | GET | `/v1/business/me` | Echo trusted identity (requires `X-User-Id`) |
 | GET | `/v1/business/items` | List items (tenant-scoped) |
-| POST | `/v1/business/items` | Create item + outbox event |
+| POST | `/v1/business/items` | Create item + outbox event + optional MQ job |
+| GET | `/v1/business/items/{id}` | Get item by id (tenant-scoped) |
+| PATCH | `/v1/business/items/{id}` | Update title/body + outbox event |
+| DELETE | `/v1/business/items/{id}` | Delete item + outbox event |
+
+## Async jobs (RabbitMQ)
+
+After create/update/delete, may publish `business.item.*` jobs to the platform work queue
+(same topology as Go worker: `ting.jobs` / routing key `platform`). Skipped when
+`RABBITMQ_URL` is unset or a placeholder.
+
+```env
+RABBITMQ_URL=amqp://guest:guest@127.0.0.1:5672/
+# RABBITMQ_QUEUE_PREFIX=ting.jobs
+```
+
+Run `make run-worker` to consume jobs alongside the outbox → audit dispatcher.
 
 ## Run
 
@@ -24,7 +40,7 @@ From repo root:
 
 ```bash
 make node-install
-cd node && pnpm --filter @ting/api-types build
+cd node && pnpm --filter @ting/api build
 pnpm dev:business
 ```
 
@@ -35,6 +51,18 @@ pnpm dev
 ```
 
 Default listen: `:3005` (`BUSINESS_HTTP_ADDR`; avoids Logto on `:3001`).
+
+## Observability
+
+When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, `src/instrument.ts` enables the OpenTelemetry
+Node SDK (auto-instrumentation) before Nest boots. Traces and **logs** (JSON stdout + OTLP)
+flow: business-service → Collector → Tempo / Loki.
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317
+OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+# OTEL_LOGS_EXPORTER=otlp   # set to "none" to skip OTLP log fan-out
+```
 
 ## Database
 

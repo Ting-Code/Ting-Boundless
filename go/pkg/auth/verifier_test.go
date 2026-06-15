@@ -9,7 +9,7 @@ import (
 
 func TestVerifier_DevHMAC(t *testing.T) {
 	cfg := Config{
-		Issuer:    "http://test/oidc",
+		Issuers:   []string{"http://test/oidc"},
 		Audience:  "ting-test",
 		DevSecret: "test-secret",
 	}

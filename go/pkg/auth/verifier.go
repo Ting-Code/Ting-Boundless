@@ -18,20 +18,30 @@ import (
 
 // Config holds OIDC verification parameters (12-Factor via env).
 type Config struct {
-	Issuer    string
-	JWKSURL   string
+	Issuers   []string // trusted iss (Logto + auth-service internal issuer)
+	JWKSURLs  []string
 	Audience  string
 	DevSecret string // local dev only: HS256 when JWKS/Logto unavailable
 }
 
 // ConfigFromEnv loads verification settings from the environment.
 func ConfigFromEnv() Config {
-	return Config{
-		Issuer:    httpx.Env("OIDC_ISSUER", ""),
-		JWKSURL:   httpx.Env("OIDC_JWKS_URL", ""),
+	cfg := Config{
 		Audience:  httpx.Env("OIDC_AUDIENCE", ""),
 		DevSecret: httpx.Env("GATEWAY_DEV_JWT_SECRET", ""),
 	}
+	cfg.Issuers = appendNonEmpty(cfg.Issuers, httpx.Env("OIDC_ISSUER", ""))
+	cfg.Issuers = appendNonEmpty(cfg.Issuers, httpx.Env("AUTH_OIDC_ISSUER", ""))
+	cfg.JWKSURLs = appendNonEmpty(cfg.JWKSURLs, httpx.Env("OIDC_JWKS_URL", ""))
+	cfg.JWKSURLs = appendNonEmpty(cfg.JWKSURLs, httpx.Env("AUTH_JWKS_URL", ""))
+	return cfg
+}
+
+func appendNonEmpty(list []string, v string) []string {
+	if v == "" || config.IsPlaceholder(v) {
+		return list
+	}
+	return append(list, v)
 }
 
 // Verifier validates Bearer JWTs and produces trusted identity fields.
@@ -45,8 +55,8 @@ type Verifier struct {
 func NewVerifier(ctx context.Context, cfg Config, log *slog.Logger) (*Verifier, error) {
 	v := &Verifier{cfg: cfg, log: log}
 
-	if !config.IsPlaceholder(cfg.JWKSURL) && cfg.JWKSURL != "" {
-		k, err := keyfunc.NewDefaultCtx(ctx, []string{cfg.JWKSURL})
+	if len(cfg.JWKSURLs) > 0 {
+		k, err := keyfunc.NewDefaultCtx(ctx, cfg.JWKSURLs)
 		if err != nil {
 			if cfg.DevSecret == "" {
 				return nil, fmt.Errorf("jwks: %w", err)
@@ -136,9 +146,9 @@ func (v *Verifier) parseWithHMAC(tokenString string) (jwt.MapClaims, error) {
 }
 
 func (v *Verifier) validateStandardClaims(claims jwt.MapClaims) error {
-	if v.cfg.Issuer != "" {
+	if len(v.cfg.Issuers) > 0 {
 		iss, _ := claims["iss"].(string)
-		if iss != v.cfg.Issuer {
+		if !issuerAllowed(iss, v.cfg.Issuers) {
 			return fmt.Errorf("jwt: issuer mismatch")
 		}
 	}
@@ -162,6 +172,15 @@ func audienceContains(audClaim any, want string) bool {
 			if s, ok := item.(string); ok && s == want {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func issuerAllowed(iss string, allowed []string) bool {
+	for _, want := range allowed {
+		if iss == want {
+			return true
 		}
 	}
 	return false

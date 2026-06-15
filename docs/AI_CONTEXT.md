@@ -6,7 +6,7 @@ This file gives AI coding agents a compact, durable understanding of the project
 
 ## Architecture In One Sentence
 
-Nginx guards the edge, Go Gateway/BFF centralizes shared request logic without duplication, Logto owns identity through OIDC/JWKS, Go services own platform capabilities, NestJS + Drizzle owns domain CRUD in node/apps/business-service; Next.js and Vite admin in node/apps share Gateway cookies and /v1 APIs via @ting/api-types, Python is reserved for heavy AI/data pipelines, platform-contracts define cross-language behavior, OpenTelemetry provides observability, CloudEvents audit events flow into Audit Service, and PostgreSQL/Redis/RabbitMQ/S3 form the infrastructure base.
+Nginx guards the edge, Go Gateway/BFF centralizes shared request logic without duplication, Logto owns identity through OIDC/JWKS, Go services own platform capabilities, NestJS + Drizzle owns domain CRUD in node/apps/business-service; Next.js and Vite admin in node/apps share Gateway cookies and /v1 APIs via @ting/api, Python is reserved for heavy AI/data pipelines, platform-contracts define cross-language behavior, OpenTelemetry provides observability, CloudEvents audit events flow into Audit Service, and PostgreSQL/Redis/RabbitMQ/S3 form the infrastructure base.
 
 ## Non-Negotiable Rules
 
@@ -214,6 +214,7 @@ Implementation notes:
 BFF auth (OIDC client + cookie) is needed only for Web
 a mini-program login endpoint does code2session and issues a standard JWT
 mobile login does not involve the Gateway
+see docs/MOBILE_AUTH.md for Native App OIDC + PKCE setup and API usage
 verify Logto WeChat mini-program support; otherwise implement code2session in auth-service
 ```
 
@@ -244,7 +245,7 @@ Next.js Route Handlers are not the primary business backend.
 
 ```text
 node/apps/site: Next.js SSR/SEO; Server fetches Gateway /v1; no next-auth; no JWT in browser JS
-node/apps/admin: Vite + React SPA; TanStack Query; credentials: include; types from @ting/api-types
+node/apps/admin: Vite + React SPA; TanStack Query; credentials: include; types from @ting/api
 Both use the same Web cookie model through Gateway BFF.
 Admin static assets may be served without a Node runtime.
 ```
@@ -252,8 +253,8 @@ Admin static assets may be served without a Node runtime.
 ### Type Sharing
 
 ```text
-platform-contracts OpenAPI → generate node/packages/api-types (@ting/api-types)
-Nest business-service + node/apps/admin + node/apps/site import api-types
+platform-contracts OpenAPI → generate node/packages/api (@ting/api)
+Nest business-service + node/apps/admin + node/apps/site import @ting/api
 Drizzle DB types stay server-side only; map to API DTOs in Nest
 proto/buf for common types (identity, error, audit) and V2 internal gRPC
 Do not use tRPC or framework-only type tunnels as the cross-client contract.
@@ -560,7 +561,7 @@ Prefer:
 small Go services following the service template
 node/ pnpm monorepo for all Node/TypeScript
 NestJS business-service for domain CRUD (Drizzle, outbox, identity headers)
-@ting/api-types generated from platform-contracts OpenAPI
+@ting/api generated from platform-contracts OpenAPI
 12-Factor app behavior
 JSON stdout logs
 OpenTelemetry instrumentation
@@ -611,7 +612,7 @@ Go platform services (user, file, audit, worker)
 node/ pnpm monorepo (apps + packages)
 NestJS business-service + Drizzle (node/apps/business-service)
 node/apps/site (Next.js) + node/apps/admin (Vite)
-node/packages/api-types from platform-contracts OpenAPI
+node/packages/api from platform-contracts OpenAPI
 PostgreSQL (managed or local infra compose for dev)
 Redis
 RabbitMQ

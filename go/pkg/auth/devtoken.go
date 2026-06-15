@@ -20,8 +20,8 @@ func DevToken(cfg Config, userID, tenantID string, roles []string, ttl time.Dura
 		"iat":       now.Unix(),
 		"exp":       now.Add(ttl).Unix(),
 	}
-	if cfg.Issuer != "" {
-		claims["iss"] = cfg.Issuer
+	if len(cfg.Issuers) > 0 {
+		claims["iss"] = cfg.Issuers[0]
 	}
 	if cfg.Audience != "" {
 		claims["aud"] = cfg.Audience

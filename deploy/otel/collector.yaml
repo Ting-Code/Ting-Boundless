@@ -1,6 +1,11 @@
 # Minimal OpenTelemetry Collector for V1.
-# Services send OTLP here; the collector fans out to backends. Keep it light in
-# V1 (debug exporter), wire Loki/Prometheus/Tempo in V2.
+# Services send OTLP here; the collector fans out to backends.
+#
+# Local:
+#   OTLP gRPC :4317, HTTP :4318
+#   Prometheus scrape (OTel metrics): http://localhost:8889/metrics
+#   Traces → Tempo; logs → Loki
+#   See deploy/otel/README.md
 
 receivers:
   otlp:
@@ -20,19 +25,28 @@ processors:
 exporters:
   debug:
     verbosity: normal
-  # V2: add prometheus, loki, otlp/tempo exporters here.
+  prometheus:
+    endpoint: 0.0.0.0:8889
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    tls:
+      insecure: true
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug]
+      exporters: [debug, otlp/tempo]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug]
+      exporters: [debug, prometheus]
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug]
+      exporters: [debug, loki]

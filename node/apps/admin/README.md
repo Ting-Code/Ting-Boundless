@@ -1,11 +1,13 @@
 # @ting/admin
 
-Vite + React admin SPA (`basename` `/admin`). TanStack Query → Gateway `/v1` with
-`credentials: include`. Types from `@ting/api-types`.
+Vite + React **Web 后台** SPA (`basename` `/admin`). TanStack Query → Gateway `/v1` with
+`credentials: include`（Gateway BFF HttpOnly cookie）。Paths、types、`apiFetch` 来自 `@ting/api`。
+
+> V1 只做 Web 后台；小程序 / App 客户端不在 `node/` 范围内（见 `node/README.md` § V1 scope）。
 
 ## Run (dev)
 
-Gateway, Redis, and business-service must be running. Vite proxies `/v1` and `/sign-in` to Gateway.
+Gateway、Redis、business-service 需已启动。Vite 将 `/v1`、`/sign-in` 代理到 Gateway。
 
 ```bash
 # repo root
@@ -15,15 +17,26 @@ make run-admin
 # http://localhost:5173/admin/items
 ```
 
-**Dev login (no Logto):** click「开发环境登录」or open `/sign-in/dev?return_to=/admin/items`.
-Requires `GATEWAY_BFF_DEV_LOGIN=true` and Redis in `.env`.
+**开发登录（无 Logto）：**「开发环境登录」或 `/sign-in/dev?return_to=/admin/items`。  
+默认角色 `user,admin`（可访问 **审计** 页）；`.env` 需 `GATEWAY_BFF_DEV_LOGIN=true` 与 Redis。
 
-See [`docs/E2E_ADMIN.md`](../../docs/E2E_ADMIN.md) and `make e2e-admin` for scripted smoke.
+**Logto 生产路径：**见 [`docs/BFF_LOGTO.md`](../../docs/BFF_LOGTO.md)（调用 Gateway `/sign-in`，无需在 Admin 写 OIDC）。
+
+完整联调见 [`docs/E2E_ADMIN.md`](../../docs/E2E_ADMIN.md)、`make e2e-admin`。
 
 ## Pages (V1)
 
-| Route | Description |
-|-------|-------------|
-| `/admin/items` | List + create business items (`/v1/business/items`) |
+| Route | API | 说明 |
+|-------|-----|------|
+| `/admin/items` | `businessPaths.*` | 业务条目 CRUD |
+| `/admin/files` | `filePaths.*` | 上传 / 列表 / 预签名下载 |
+| `/admin/account` | `businessPaths.me`, `userPaths.me` | 身份 + 显示名称 |
+| `/admin/audit` | `auditPaths.events` | 审计事件列表 + 详情抽屉（需 admin 角色） |
+| `/admin/users` | `userPaths.list` | 当前租户用户列表（需 admin 角色） |
 
-Unauthenticated requests redirect to Gateway `/sign-in`.
+未登录时跳转 Gateway `/sign-in`。
+
+## OpenAPI 域
+
+后台使用的契约：`business.v1`、`users.v1`、`files.v1`、`audit.v1`（见 `platform-contracts/openapi/`）。  
+改 API 后执行 `make generate-api`。

@@ -4,6 +4,10 @@ info:
   version: 1.0.0
   description: Domain CRUD under /v1/business/* (Nest business-service).
 
+servers:
+  - url: http://127.0.0.1:8080
+    description: Gateway (local)
+
 paths:
   /v1/business/ping:
     get:
@@ -16,6 +20,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BusinessPingResponse'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
 
   /v1/business/me:
     get:
@@ -33,7 +43,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
 
   /v1/business/items:
     get:
@@ -46,6 +56,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListItemsResponse'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
     post:
       operationId: createBusinessItem
       summary: Create a business item
@@ -67,13 +83,110 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
         '401':
           description: Unauthenticated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+
+  /v1/business/items/{id}:
+    get:
+      operationId: getBusinessItem
+      summary: Get a business item by id (tenant-scoped)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetItemResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+    patch:
+      operationId: updateBusinessItem
+      summary: Update a business item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateItemRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetItemResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+    delete:
+      operationId: deleteBusinessItem
+      summary: Delete a business item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
 
 components:
   schemas:
@@ -83,7 +196,7 @@ components:
       properties:
         ok:
           type: boolean
-          const: true
+          enum: [true]
         service:
           type: string
 
@@ -158,17 +271,20 @@ components:
         item:
           $ref: '#/components/schemas/BusinessItem'
 
-    ErrorEnvelope:
+    GetItemResponse:
       type: object
-      required: [error]
+      required: [item]
       properties:
-        error:
-          type: object
-          required: [code, message]
-          properties:
-            code:
-              type: string
-            message:
-              type: string
-            request_id:
-              type: string
+        item:
+          $ref: '#/components/schemas/BusinessItem'
+
+    UpdateItemRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        body:
+          type: string
+          maxLength: 5000

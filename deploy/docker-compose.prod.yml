@@ -8,6 +8,9 @@
 
 name: ting-boundless-prod
 
+x-prod-env: &prod-env
+  APP_ENV: production
+
 services:
   nginx:
     image: ${TCR_REGISTRY}/nginx:${IMAGE_TAG}
@@ -24,6 +27,7 @@ services:
     image: ${TCR_REGISTRY}/gateway:${IMAGE_TAG}
     env_file: ../.env
     environment:
+      <<: *prod-env
       HTTP_ADDR: :8080
       USER_SERVICE_URL: http://user-service:8081
       BUSINESS_SERVICE_URL: http://business-service:3005
@@ -42,6 +46,7 @@ services:
     image: ${TCR_REGISTRY}/business-service:${IMAGE_TAG}
     env_file: ../.env
     environment:
+      <<: *prod-env
       BUSINESS_HTTP_ADDR: :3005
       NODE_ENV: production
     restart: unless-stopped
@@ -49,24 +54,34 @@ services:
   auth-service:
     image: ${TCR_REGISTRY}/auth-service:${IMAGE_TAG}
     env_file: ../.env
+    environment:
+      <<: *prod-env
     restart: unless-stopped
 
   user-service:
     image: ${TCR_REGISTRY}/user-service:${IMAGE_TAG}
     env_file: ../.env
+    environment:
+      <<: *prod-env
     restart: unless-stopped
 
   file-service:
     image: ${TCR_REGISTRY}/file-service:${IMAGE_TAG}
     env_file: ../.env
+    environment:
+      <<: *prod-env
     restart: unless-stopped
 
   audit-service:
     image: ${TCR_REGISTRY}/audit-service:${IMAGE_TAG}
     env_file: ../.env
+    environment:
+      <<: *prod-env
     restart: unless-stopped
 
   worker:
     image: ${TCR_REGISTRY}/worker:${IMAGE_TAG}
     env_file: ../.env
+    environment:
+      <<: *prod-env
     restart: unless-stopped

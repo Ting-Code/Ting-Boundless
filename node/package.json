@@ -3,11 +3,11 @@
   "private": true,
   "description": "pnpm monorepo: Nest business-service, Next site, Vite admin, shared TS packages",
   "scripts": {
-    "build": "pnpm --filter @ting/logger build && pnpm --filter @ting/api-types build && pnpm --filter @ting/business-service build && pnpm --filter @ting/admin build",
+    "build": "pnpm --filter @ting/logger build && pnpm --filter @ting/api build && pnpm --filter @ting/business-service build && pnpm --filter @ting/admin build",
     "dev:business": "pnpm --filter @ting/business-service dev",
     "dev:admin": "pnpm --filter @ting/admin dev",
     "dev:site": "pnpm --filter @ting/site dev",
-    "generate:api-types": "pnpm --filter @ting/api-types generate"
+    "generate:api": "pnpm --filter @ting/api generate"
   },
   "engines": {
     "node": ">=20"
