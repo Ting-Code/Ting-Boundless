@@ -27,6 +27,7 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/server-locations.inc:/etc/nginx/server-locations.inc:ro
       - ./nginx/proxy.conf:/etc/nginx/proxy.conf:ro
       - ../node/apps/admin/dist:/usr/share/nginx/html/admin:ro
     restart: unless-stopped

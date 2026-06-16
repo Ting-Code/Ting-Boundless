@@ -3,8 +3,8 @@
 > **Purpose:** Track gaps between architecture docs, implemented code, and industry
 > best practices. Use item IDs (e.g. `S-01`) in issues and PRs.
 >
-> **Scope:** Full repo scan (77 files, ~2900 lines Go, 0 test files).
-> **Last updated:** 2026-06-08 (Node/TS consolidated under `node/` pnpm monorepo)
+> **Scope:** Full repo (Go services + `go/pkg/` + Node monorepo); see per-section matrices below.
+> **Last updated:** 2026-06-05 (pkg authz `TrustedAuth`/`TrustedRole`; Nest `RequireAuthenticatedMiddleware`)
 > **Rule:** This document is the single source for gap tracking; fix items in code
 > separately — do not duplicate gap lists across README/ARCHITECTURE.
 
@@ -28,16 +28,18 @@
 ## Executive summary
 
 ```text
-Aligned (✅)     23 / 65 items  (~35%)
-Partial (🟡)    20 / 65 items  (~31%)
-Gap (🔴)        22 / 65 items  (~34%)
+Aligned (✅)     ~52 / 68 items  (~76%)
+Partial (🟡)     ~8 / 68 items   (~12%)
+Gap (🔴)         ~2 / 68 items   (~3%)
+Deferred (🟢)    ~6 / 68 items   (~9%)
 ```
 
-**Shape:** Governance and docs are production-grade; runtime capabilities (auth,
-audit, observability, tests) are early skeleton (~30–35% of industry MVP bar).
+**Shape:** Platform baseline (Gateway auth, identity trust, audit outbox, OpenAPI, admin UI,
+Go integration tests, OTel hooks) is largely in place. Remaining gaps are mostly production
+hardening (HTTPS edge, audit_db creds split, golangci-lint CI, V2 items).
 
-**Critical path to “first real loop”:** `S-01` → `S-02` → `S-08` → `P-07`/`P-08`
-→ `D-02`/`D-04` — not adding more services.
+**Critical path (done for V1 demo):** Gateway JWT → user/items/files/audit APIs → admin SPA.
+Next hardening: optional broader Postgres integration tests.
 
 ---
 
@@ -53,7 +55,7 @@ audit, observability, tests) are early skeleton (~30–35% of industry MVP bar).
 | S-06 | P1 | Redis revocation/session blocklist for sensitive paths | Subject + session blocklist in Redis; Gateway checks on `GATEWAY_SENSITIVE_PREFIXES`; Logto `User.Deleted` revokes | ✅ | `go/pkg/revocation/`, `gateway/internal/auth/` |
 | S-07 | P0 | Strip client `X-User-*` before trust | `StripUntrusted` first in `authenticate()` | ✅ | `go/pkg/identity/identity.go` |
 | S-08 | P0 | Client `X-Request-Id` not trusted at edge; gateway regenerates | Gateway `authenticate()` generates `request_id`; no `RequestID` middleware on gateway | ✅ | `gateway/internal/auth/middleware.go` |
-| S-09 | P0 | Business services do not parse end-user JWTs | Nest `IdentityMiddleware`; Go `identity.Middleware` | ✅ | `business-service`, `go/services/*/main.go` |
+| S-09 | P0 | Business services do not parse end-user JWTs | Go `httpx.TrustedAuth`; Nest `RequireAuthenticatedMiddleware` | ✅ | `go/pkg/httpx`, `business-service` |
 | S-10 | P0 | Service-to-service trust: internal token / network isolation | Gateway injects `X-Internal-Token`; `GatewayTrust` on Go + Nest; prod fails startup if unset | ✅ | `go/pkg/httpx/internal_token.go`, `gatewaytrust.go` |
 | S-16 | P0 | Gateway anonymous path whitelist; non-whitelist 401 at edge | Exact+prefix rules; `/sign-in/dev` only when `GATEWAY_BFF_DEV_LOGIN=true` | ✅ | `gateway/internal/auth/anon.go` |
 | S-11 | P1 | Logto webhook: signature verify, idempotency, audit mapping | HMAC verify + `webhook_deliveries` + audit emit | ✅ | `auth-service/internal/logto/` |
@@ -115,7 +117,7 @@ Gateway chain (outer → inner): `TraceContext` → `AccessLog` → `Recover` �
 | D-07 | P2 | RabbitMQ + DLQ for async | Work queue + DLQ + consumer in worker; `pkg/mq` publish/consume | ✅ | `go/pkg/mq/`, `worker/internal/jobs/` |
 | D-08 | P2 | S3-compatible file storage | SigV4 PUT/GET + presigned download URL | ✅ | `pkg/storage/`, `file-service/internal/` |
 | D-09 | P1 | Cloud placeholder hosts skip connect | `config.IsPlaceholder` | ✅ | `go/pkg/config/placeholder.go` |
-| D-10 | P1 | `audit_db` restricted credentials in production | Dev shares `ting` role on all DBs | 🟡 Acceptable V1 dev only | `setup-local.sql`, `ARCHITECTURE.md` |
+| D-10 | P1 | `audit_db` restricted credentials in production | `audit_writer` role + `AUDIT_POSTGRES_*` runtime env; migration grants | ✅ | `deploy/postgres/`, `go/pkg/db`, migration `000003` |
 | D-11 | P1 | `Postgres.Pool()` exposed but unused | All PG services use `Pool()` via `internal/store` layers | ✅ | `go/pkg/db/postgres.go`, `services/*/internal/store/` |
 
 ---
@@ -145,7 +147,7 @@ Gateway chain (outer → inner): `TraceContext` → `AccessLog` → `Recover` �
 | P-03 | P1 | Non-root distroless images | `gcr.io/distroless/static-debian12:nonroot` | ✅ | `deploy/Dockerfile` |
 | P-04 | P1 | Graceful shutdown on SIGTERM | `httpx.Server.Run` | ✅ | `go/pkg/httpx/server.go` |
 | P-05 | P1 | nginx coarse + auth rate limits | `zone=general`, `zone=auth` | ✅ | `deploy/nginx/nginx.conf` |
-| P-06 | P2 | HTTPS at edge (certbot / cloud cert) | nginx listens **80 only** | 🟢 Local dev OK | `nginx.conf` |
+| P-06 | P2 | HTTPS at edge (certbot / cloud cert) | `nginx.prod.conf` :443 + HSTS; :80 redirect; dev `nginx.conf` :80 only | ✅ | `deploy/nginx/` |
 | P-07 | P0 | Service ports consistent across nginx ↔ process | `/v1/auth/` proxied via Gateway → `auth-service:8084`; no direct nginx→auth port mismatch | ✅ | `deploy/nginx/nginx.conf`, `docker-compose.yml` |
 | P-08 | P0 | Gateway upstream URLs use Docker DNS in compose | `USER_SERVICE_URL` etc. set in `docker-compose.yml` | ✅ | `gateway/main.go`, `docker-compose.yml` |
 | P-09 | P1 | `.env` for compose uses service names not localhost | `docs/ENV_PROFILES.md` + docker overrides in compose; `.env.example` docker block | ✅ | `docs/ENV_PROFILES.md`, `deploy/docker-compose.yml` |
@@ -176,7 +178,7 @@ Recommend documenting two profiles: **native-local** vs **docker-full** (no code
 | Q-01 | P0 | Tests for auth and identity boundary | Gateway auth + edge integration (JWT, 401, rate limit, revocation, request_id) | ✅ | `go/services/gateway/` |
 | Q-02 | P1 | Integration test: gateway → user with token | `integration_user_test.go` (Bearer → proxy → upstream headers) | ✅ | `go/services/gateway/` |
 | Q-03 | P1 | CI: tidy, vet, build, test, image scan | `ci.yml`: go mod tidy + buf + migrate + node build + Trivy gateway image | ✅ | `.github/workflows/ci.yml` |
-| Q-04 | P2 | golangci-lint in pipeline | Optional in Makefile | 🟢 | `Makefile` |
+| Q-04 | P2 | golangci-lint in pipeline | `go/.golangci.yml` + CI `golangci-lint-action` | ✅ | `Makefile`, `.github/workflows/ci.yml` |
 | Q-05 | P1 | `AGENTS.md` entry for AI agents | Present | ✅ | `AGENTS.md` |
 | Q-06 | P1 | Cursor rules enforce architecture | 6× `.mdc` rules | ✅ | `.cursor/rules/` |
 | Q-07 | P1 | `new-go-service` skill (Golden Path) | Present | ✅ | `.cursor/skills/new-go-service/` |
@@ -194,7 +196,7 @@ Recommend documenting two profiles: **native-local** vs **docker-full** (no code
 | auth-service | :8084 | ✅ | PG + Redis | Webhook/mini stub | ✅ Accurate |
 | user-service | :8081 | ✅ | PG | `GET/PATCH /v1/users/me` profile | ✅ |
 | business-service (Nest) | :3005 | ✅ | PG probe on /readyz | items CRUD + outbox | ✅ |
-| file-service | :8083 | ✅ | PG + S3 probe | Upload + metadata + download + presigned URL | ✅ |
+| file-service | :8083 | ✅ | PG + S3 probe | Upload + list + download + presign + delete | ✅ |
 | audit-service | :8085 | ✅ | `audit_db` | Ingest + `GET /v1/audit/events` | ✅ |
 | worker | :8086 | ✅ | PG + RabbitMQ probe | Outbox → audit; MQ `business.item.*` → `worker_job_effects` | ✅ |
 
@@ -205,14 +207,15 @@ Recommend documenting two profiles: **native-local** vs **docker-full** (no code
 | Package | Industry role | Status | Gap IDs |
 |---------|---------------|--------|---------|
 | `logger` | ECS JSON stdout | ✅ Production-ready for V1 | — |
-| `identity` | Header strip/inject/context | ✅ Gateway strip + inject; pkg/contracts proto bridge | — |
-| `errs` | Unified error envelope | ✅ Go `errs.Write` + Nest filter | — |
-| `httpx` | Server, health, middleware | ✅ Metrics + trace middleware | S-08 |
-| `audit` | Event model + HTTP/async emitters | ✅ HTTPEmitter + Async; worker outbox dispatch | — | `go/pkg/audit/` |
-| `db` | pgx pool + readyz | ✅ Connect layer done | — |
-| `cache` | Redis client | ✅ Sessions, rate limits, revocation | S-06 |
+| `identity` | Header strip/inject/context | ✅ `Authenticated()`, `HasRole()`; proto bridge | — |
+| `errs` | Unified error envelope | ✅ Prefer `httpx.WriteError` in handlers | — |
+| `httpx` | Server, health, middleware | ✅ `TrustedAuth` / `TrustedRole`; metrics + trace | — |
+| `contracts` | Proto ↔ pkg bridges | ✅ identity/error/audit round-trip tests | — |
+| `audit` | Event model + HTTP/async emitters | ✅ HTTPEmitter + Async; worker outbox dispatch | — |
+| `db` | pgx pool + readyz | ✅ Connect + migrations | — |
+| `cache` | Redis client | ✅ Sessions, rate limits, revocation | — |
 | `mq` | RabbitMQ client | ✅ Topology, publish, consume + DLQ | — |
-| `storage` | S3 probe + SigV4 client | ✅ PUT/GET/presign | — |
+| `storage` | S3 probe + SigV4 client | ✅ PUT/GET/presign/delete | — |
 | `config` | env + placeholder | ✅ | — |
 
 ---
@@ -237,11 +240,11 @@ Recommend documenting two profiles: **native-local** vs **docker-full** (no code
 |-----------|-----------------|------------------------|
 | Architecture documentation | Top ~10% (small teams) | Strong |
 | Platform / AI governance | Top ~20% | Ahead of many startups |
-| Edge security (JWT, trust) | Below MVP | Far |
-| Observability (metrics/trace) | Below MVP | Far |
-| Audit / compliance path | Designed, not built | Not ready |
-| Testing & CI | Bottom quartile | Far |
-| Container config correctness | Native dev OK; full compose weak | Needs P-07–P-09 |
+| Edge security (JWT, trust) | MVP bar met | Production hardening (HTTPS, audit_db creds) |
+| Observability (metrics/trace) | MVP bar met | Full SLO dashboards / alerting |
+| Audit / compliance path | V1 HTTP + outbox path live | MQ ingest + retention policy |
+| Testing & CI | Go integration + CI workflow | Postgres integration tests; golangci-lint |
+| Container config correctness | Native + compose documented | HTTPS edge (P-06) |
 
 ---
 
@@ -297,7 +300,7 @@ Deliverable: Nest `business-service` CRUD; `@ting/api`（business/users/files/au
 |----|----------|-----------------|--------------|-----|-----------|
 | W-01 | P1 | `node/apps/business-service` = NestJS + Drizzle under `/v1/business/*` | items full CRUD + outbox; OpenAPI `business.v1.yaml` | ✅ | `node/apps/business-service/` |
 | W-02 | P1 | `@ting/api` generated from OpenAPI | 5 域 spec → openapi-typescript；paths + `apiFetch` | ✅ | `node/packages/api/` |
-| W-03 | P1 | `@ting/admin` Vite + TanStack Query → Gateway `/v1` | items + files + account + audit 页 | ✅ | `node/apps/admin/` |
+| W-03 | P1 | `@ting/admin` Vite + TanStack Query → Gateway `/v1` | items + files + account + audit + users 页 | ✅ | `node/apps/admin/` |
 | W-04 | P2 | `@ting/site` Next.js SSR behind Gateway | 脚手架可用；V1 后台主线外 | 🟢 延后 | `node/apps/site/` |
 | W-05 | P1 | Gateway/nginx route table for `/v1/business/*`, `/admin`, Next | Gateway site proxy (`SITE_SERVICE_URL`); anon `=/`; nginx `/` → gateway | ✅ | `gateway/main.go`, `deploy/nginx/nginx.conf` |
 | W-06 | P2 | OpenAPI specs for `/v1` domains | `business`, `users`, `files`, `audit` + `common` ErrorEnvelope | ✅ | `platform-contracts/openapi/` |
@@ -336,6 +339,9 @@ Deliverable: Nest `business-service` CRUD; `@ting/api`（business/users/files/au
 | 2026-06-05 | OpenAPI specs: Gateway `servers` + Redocly 规则；admin 审计页详情抽屉 |
 | 2026-06-05 | `docs/BFF_LOGTO.md`：Logto BFF 生产路径、Admin 调用契约、联调 checklist |
 | 2026-06-05 | C-09: OpenAPI breaking CI (`oasdiff`)；BFF `Secure` cookie；admin SessionBar 显示 roles |
+| 2026-06-05 | P-06: `nginx.prod.conf` HTTPS + HSTS; CI `audit_writer` integration test |
+| 2026-06-05 | `files.v1` DELETE 403; `@ting/api` regen; GAP checklist executive summary refresh |
+| 2026-06-05 | Admin: `useAuthMutation` + global 401 DX; `@ting/api` Vitest (`paths.test.ts`); CI `pnpm test`/`typecheck` |
 
 ---
 

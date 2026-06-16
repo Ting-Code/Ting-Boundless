@@ -1,42 +1,48 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   apiFetch,
-  ApiError,
   businessPaths,
+  isApiError,
   type BusinessItem,
   type CreateItemRequest,
   type ListItemsResponse,
   type UpdateItemRequest,
 } from '@ting/api';
 import {
-  Alert,
   Button,
   Card,
+  Descriptions,
+  Drawer,
   Form,
   Input,
   Modal,
   Popconfirm,
   Space,
   Table,
-  Typography,
   message,
 } from 'antd';
 import { useState } from 'react';
-import { signInPath } from '../config/auth';
+import { PageShell } from '../components/PageShell';
+import { QueryErrorAlert } from '../components/QueryErrorAlert';
+import { useApiQuery } from '../hooks/useApiQuery';
+import { useAuthMutation } from '../hooks/useAuthMutation';
 import { handleAuthError } from '../hooks/useSession';
+import { formatDateTime } from '../utils/format';
 
 export function ItemsPage() {
   const queryClient = useQueryClient();
   const [form] = Form.useForm<CreateItemRequest>();
   const [editForm] = Form.useForm<UpdateItemRequest>();
   const [editing, setEditing] = useState<BusinessItem | null>(null);
+  const [viewing, setViewing] = useState<BusinessItem | null>(null);
 
-  const itemsQuery = useQuery({
+  const itemsQuery = useApiQuery({
     queryKey: ['business', 'items'],
     queryFn: () => apiFetch<ListItemsResponse>(businessPaths.items),
+    authReturnTo: '/admin/items',
   });
 
-  const createMutation = useMutation({
+  const createMutation = useAuthMutation('/admin/items', {
     mutationFn: (body: CreateItemRequest) =>
       apiFetch(businessPaths.items, {
         method: 'POST',
@@ -48,15 +54,11 @@ export function ItemsPage() {
       void queryClient.invalidateQueries({ queryKey: ['business', 'items'] });
     },
     onError: (err: unknown) => {
-      if (handleAuthError(err)) {
-        return;
-      }
-      const msg = err instanceof ApiError ? err.message : '创建失败';
-      message.error(msg);
+      message.error(isApiError(err) ? err.message : '创建失败');
     },
   });
 
-  const updateMutation = useMutation({
+  const updateMutation = useAuthMutation('/admin/items', {
     mutationFn: ({ id, body }: { id: string; body: UpdateItemRequest }) =>
       apiFetch(businessPaths.item(id), {
         method: 'PATCH',
@@ -68,15 +70,11 @@ export function ItemsPage() {
       void queryClient.invalidateQueries({ queryKey: ['business', 'items'] });
     },
     onError: (err: unknown) => {
-      if (handleAuthError(err)) {
-        return;
-      }
-      const msg = err instanceof ApiError ? err.message : '更新失败';
-      message.error(msg);
+      message.error(isApiError(err) ? err.message : '更新失败');
     },
   });
 
-  const deleteMutation = useMutation({
+  const deleteMutation = useAuthMutation('/admin/items', {
     mutationFn: (id: string) =>
       apiFetch(businessPaths.item(id), { method: 'DELETE' }),
     onSuccess: () => {
@@ -84,11 +82,7 @@ export function ItemsPage() {
       void queryClient.invalidateQueries({ queryKey: ['business', 'items'] });
     },
     onError: (err: unknown) => {
-      if (handleAuthError(err)) {
-        return;
-      }
-      const msg = err instanceof ApiError ? err.message : '删除失败';
-      message.error(msg);
+      message.error(isApiError(err) ? err.message : '删除失败');
     },
   });
 
@@ -97,30 +91,21 @@ export function ItemsPage() {
     editForm.setFieldsValue({ title: item.title, body: item.body });
   };
 
-  if (itemsQuery.isError && handleAuthError(itemsQuery.error)) {
+  if (itemsQuery.isError && handleAuthError(itemsQuery.error, '/admin/items')) {
     return null;
   }
 
-  const error = itemsQuery.error;
-  if (error instanceof ApiError && error.status === 401) {
+  if (itemsQuery.isError) {
     return (
-      <Alert
-        type="warning"
-        message="未登录"
-        description={
-          <Button type="link" href={signInPath('/admin/items')}>
-            前往登录
-          </Button>
-        }
-      />
+      <PageShell title="业务条目">
+        <QueryErrorAlert error={itemsQuery.error} returnTo="/admin/items" />
+      </PageShell>
     );
   }
 
   return (
-    <Space direction="vertical" size="large" style={{ width: '100%' }}>
-      <Typography.Title level={3} style={{ margin: 0 }}>
-        业务条目
-      </Typography.Title>
+    <PageShell title="业务条目">
+      <Space direction="vertical" size="large" style={{ width: '100%' }}>
 
       <Card title="新建">
         <Form
@@ -143,55 +128,69 @@ export function ItemsPage() {
       </Card>
 
       <Card title="列表">
-        {itemsQuery.isError && !(itemsQuery.error instanceof ApiError && itemsQuery.error.status === 401) ? (
-          <Alert
-            type="error"
-            message="加载失败"
-            description={
-              itemsQuery.error instanceof ApiError
-                ? itemsQuery.error.message
-                : String(itemsQuery.error)
-            }
-          />
-        ) : (
-          <Table
-            rowKey="id"
-            loading={itemsQuery.isLoading}
-            dataSource={itemsQuery.data?.items ?? []}
-            pagination={false}
-            columns={[
-              { title: '标题', dataIndex: 'title' },
-              { title: '备注', dataIndex: 'body', ellipsis: true },
-              { title: '创建人', dataIndex: 'created_by', width: 140 },
-              {
-                title: '创建时间',
-                dataIndex: 'created_at',
-                width: 200,
-                render: (v: string) => new Date(v).toLocaleString(),
-              },
-              {
-                title: '操作',
-                width: 140,
-                render: (_: unknown, row: BusinessItem) => (
-                  <Space size="small">
-                    <Button type="link" size="small" onClick={() => openEdit(row)}>
-                      编辑
+        <Table
+          rowKey="id"
+          loading={itemsQuery.isLoading}
+          dataSource={itemsQuery.data?.items ?? []}
+          pagination={false}
+          columns={[
+            { title: '标题', dataIndex: 'title' },
+            { title: '备注', dataIndex: 'body', ellipsis: true },
+            { title: '创建人', dataIndex: 'created_by', width: 140 },
+            {
+              title: '创建时间',
+              dataIndex: 'created_at',
+              width: 200,
+              render: (v: string) => formatDateTime(v),
+            },
+            {
+              title: '操作',
+              width: 180,
+              render: (_: unknown, row: BusinessItem) => (
+                <Space size="small" onClick={(e) => e.stopPropagation()}>
+                  <Button type="link" size="small" onClick={() => setViewing(row)}>
+                    详情
+                  </Button>
+                  <Button type="link" size="small" onClick={() => openEdit(row)}>
+                    编辑
+                  </Button>
+                  <Popconfirm
+                    title="删除此条目？"
+                    onConfirm={() => deleteMutation.mutate(row.id)}
+                  >
+                    <Button type="link" size="small" danger loading={deleteMutation.isPending}>
+                      删除
                     </Button>
-                    <Popconfirm
-                      title="删除此条目？"
-                      onConfirm={() => deleteMutation.mutate(row.id)}
-                    >
-                      <Button type="link" size="small" danger loading={deleteMutation.isPending}>
-                        删除
-                      </Button>
-                    </Popconfirm>
-                  </Space>
-                ),
-              },
-            ]}
-          />
-        )}
+                  </Popconfirm>
+                </Space>
+              ),
+            },
+          ]}
+          onRow={(record) => ({
+            onClick: () => setViewing(record),
+            style: { cursor: 'pointer' },
+          })}
+        />
       </Card>
+
+      <Drawer
+        title="条目详情"
+        width={480}
+        open={viewing !== null}
+        onClose={() => setViewing(null)}
+      >
+        {viewing ? (
+          <Descriptions column={1} size="small" bordered>
+            <Descriptions.Item label="ID">{viewing.id}</Descriptions.Item>
+            <Descriptions.Item label="标题">{viewing.title}</Descriptions.Item>
+            <Descriptions.Item label="备注">{viewing.body || '—'}</Descriptions.Item>
+            <Descriptions.Item label="租户">{viewing.tenant_id || '—'}</Descriptions.Item>
+            <Descriptions.Item label="创建人">{viewing.created_by}</Descriptions.Item>
+            <Descriptions.Item label="创建时间">{formatDateTime(viewing.created_at)}</Descriptions.Item>
+            <Descriptions.Item label="更新时间">{formatDateTime(viewing.updated_at)}</Descriptions.Item>
+          </Descriptions>
+        ) : null}
+      </Drawer>
 
       <Modal
         title="编辑条目"
@@ -216,6 +215,7 @@ export function ItemsPage() {
           </Form.Item>
         </Form>
       </Modal>
-    </Space>
+      </Space>
+    </PageShell>
   );
 }

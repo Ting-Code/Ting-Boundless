@@ -42,6 +42,20 @@ func ConfigFromEnv(database string) Config {
 	}
 }
 
+// AuditConfigFromEnv returns DB config for audit-service runtime connections.
+// Uses AUDIT_POSTGRES_USER / AUDIT_POSTGRES_PASSWORD when set; otherwise POSTGRES_*.
+// Migrations should still use ConfigFromEnv (schema owner).
+func AuditConfigFromEnv(database string) Config {
+	cfg := ConfigFromEnv(database)
+	if u := httpx.Env("AUDIT_POSTGRES_USER", ""); u != "" {
+		cfg.User = u
+	}
+	if p := httpx.Env("AUDIT_POSTGRES_PASSWORD", ""); p != "" {
+		cfg.Password = p
+	}
+	return cfg
+}
+
 // DSN returns a PostgreSQL connection URI for pgxpool.
 func (c Config) DSN() string {
 	return c.connectionURI("postgres")

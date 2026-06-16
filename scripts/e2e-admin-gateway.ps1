@@ -57,4 +57,14 @@ if ($audit -notmatch '"events"') {
   throw "expected events array in audit response"
 }
 
-Write-Host "OK: Gateway cookie -> business + audit E2E passed."
+Write-Host "6. GET /v1/users/ (admin role; needs user-service)..."
+$users = curl.exe -sS -b $jar "$gateway/v1/users/?limit=5"
+Write-Host $users
+if ($users -match '"code"\s*:\s*"forbidden"') {
+  throw "users list forbidden — dev sign-in should default roles user,admin"
+}
+if ($users -notmatch '"users"') {
+  throw "expected users array in /v1/users/ response"
+}
+
+Write-Host "OK: Gateway cookie -> business + audit + users E2E passed."

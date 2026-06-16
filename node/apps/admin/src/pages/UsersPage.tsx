@@ -1,53 +1,38 @@
-import { useQuery } from '@tanstack/react-query';
-import {
-  apiFetch,
-  ApiError,
-  userPaths,
-  type ListUsersResponse,
-} from '@ting/api';
-import { Alert, Card, Table, Typography } from 'antd';
-import { signInPath } from '../config/auth';
+import { apiFetch, userPaths, type ListUsersResponse } from '@ting/api';
+import { Card, Empty, Table } from 'antd';
+import { PageShell } from '../components/PageShell';
+import { QueryErrorAlert } from '../components/QueryErrorAlert';
+import { useApiQuery } from '../hooks/useApiQuery';
 import { handleAuthError } from '../hooks/useSession';
+import { formatDateTime } from '../utils/format';
 
 export function UsersPage() {
-  const usersQuery = useQuery({
+  const usersQuery = useApiQuery({
     queryKey: ['users', 'list'],
-    queryFn: () => apiFetch<ListUsersResponse>(`${userPaths.list}?limit=50`),
-    retry: false,
+    queryFn: () => apiFetch<ListUsersResponse>(userPaths.listQuery(50)),
+    authReturnTo: '/admin/users',
   });
 
-  if (usersQuery.isError && handleAuthError(usersQuery.error)) {
+  if (usersQuery.isError && handleAuthError(usersQuery.error, '/admin/users')) {
     return null;
   }
 
   if (usersQuery.isError) {
-    const err = usersQuery.error;
-    const unauthorized = err instanceof ApiError && err.status === 401;
-    const forbidden = err instanceof ApiError && err.status === 403;
     return (
-      <Alert
-        type={unauthorized || forbidden ? 'warning' : 'error'}
-        message={unauthorized ? '未登录' : forbidden ? '无权限' : '加载失败'}
-        description={
-          unauthorized ? (
-            <a href={signInPath('/admin/users')}>前往登录</a>
-          ) : err instanceof Error ? (
-            err.message
-          ) : (
-            String(err)
-          )
-        }
-      />
+      <PageShell title="租户用户">
+        <QueryErrorAlert
+          error={usersQuery.error}
+          returnTo="/admin/users"
+          forbiddenMessage="无权限（需要 admin 角色）"
+        />
+      </PageShell>
     );
   }
 
   const users = usersQuery.data?.users ?? [];
 
   return (
-    <>
-      <Typography.Title level={3} style={{ marginTop: 0 }}>
-        租户用户
-      </Typography.Title>
+    <PageShell title="租户用户">
       <Card>
         <Table
           rowKey="user_id"
@@ -56,15 +41,26 @@ export function UsersPage() {
           pagination={false}
           size="small"
           scroll={{ x: true }}
+          locale={{ emptyText: <Empty description="暂无用户" /> }}
           columns={[
             { title: '用户 ID', dataIndex: 'user_id', width: 200, ellipsis: true },
             { title: '显示名称', dataIndex: 'display_name' },
             { title: '租户 ID', dataIndex: 'tenant_id', width: 140 },
-            { title: '创建时间', dataIndex: 'created_at', width: 200 },
-            { title: '更新时间', dataIndex: 'updated_at', width: 200 },
+            {
+              title: '创建时间',
+              dataIndex: 'created_at',
+              width: 200,
+              render: (v: string) => formatDateTime(v),
+            },
+            {
+              title: '更新时间',
+              dataIndex: 'updated_at',
+              width: 200,
+              render: (v: string) => formatDateTime(v),
+            },
           ]}
         />
       </Card>
-    </>
+    </PageShell>
   );
 }

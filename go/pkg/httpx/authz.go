@@ -38,3 +38,16 @@ func RequireRole(role string) func(http.Handler) http.Handler {
 		})
 	}
 }
+
+// TrustedAuth extracts Gateway-injected identity and requires a logged-in user.
+// Use on business-service routes behind GatewayTrust.
+func TrustedAuth(next http.Handler) http.Handler {
+	return identity.Middleware(RequireAuthenticated(next))
+}
+
+// TrustedRole extracts identity and requires the given role (implies authenticated).
+func TrustedRole(role string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return identity.Middleware(RequireRole(role)(next))
+	}
+}

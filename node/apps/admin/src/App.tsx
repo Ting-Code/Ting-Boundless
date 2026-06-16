@@ -1,13 +1,28 @@
-import { Layout, Menu, Typography } from 'antd';
+import { lazy, Suspense } from 'react';
+import { Layout, Menu, Spin, Typography } from 'antd';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { SessionBar } from './components/SessionBar';
-import { AccountPage } from './pages/AccountPage';
-import { AuditPage } from './pages/AuditPage';
-import { FilesPage } from './pages/FilesPage';
-import { ItemsPage } from './pages/ItemsPage';
-import { UsersPage } from './pages/UsersPage';
+
+const DashboardPage = lazy(() =>
+  import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
+);
+const ItemsPage = lazy(() => import('./pages/ItemsPage').then((m) => ({ default: m.ItemsPage })));
+const FilesPage = lazy(() => import('./pages/FilesPage').then((m) => ({ default: m.FilesPage })));
+const AuditPage = lazy(() => import('./pages/AuditPage').then((m) => ({ default: m.AuditPage })));
+const UsersPage = lazy(() => import('./pages/UsersPage').then((m) => ({ default: m.UsersPage })));
+const AccountPage = lazy(() =>
+  import('./pages/AccountPage').then((m) => ({ default: m.AccountPage })),
+);
 
 const { Header, Content, Sider } = Layout;
+
+function PageFallback() {
+  return (
+    <div style={{ padding: 48, textAlign: 'center' }}>
+      <Spin size="large" />
+    </div>
+  );
+}
 
 export function App() {
   const location = useLocation();
@@ -20,8 +35,8 @@ export function App() {
         : location.pathname.startsWith('/users')
           ? ['users']
           : location.pathname.startsWith('/account')
-          ? ['account']
-          : [];
+            ? ['account']
+            : ['dashboard'];
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -36,6 +51,7 @@ export function App() {
           mode="inline"
           selectedKeys={selected}
           items={[
+            { key: 'dashboard', label: <Link to="/">概览</Link> },
             { key: 'items', label: <Link to="/items">业务条目</Link> },
             { key: 'files', label: <Link to="/files">文件</Link> },
             { key: 'audit', label: <Link to="/audit">审计</Link> },
@@ -49,14 +65,17 @@ export function App() {
           <SessionBar />
         </Header>
         <Content style={{ margin: 24 }}>
-          <Routes>
-            <Route path="/" element={<Navigate to="/items" replace />} />
-            <Route path="/items" element={<ItemsPage />} />
-            <Route path="/files" element={<FilesPage />} />
-            <Route path="/audit" element={<AuditPage />} />
-            <Route path="/users" element={<UsersPage />} />
-            <Route path="/account" element={<AccountPage />} />
-          </Routes>
+          <Suspense fallback={<PageFallback />}>
+            <Routes>
+              <Route path="/" element={<DashboardPage />} />
+              <Route path="/items" element={<ItemsPage />} />
+              <Route path="/files" element={<FilesPage />} />
+              <Route path="/audit" element={<AuditPage />} />
+              <Route path="/users" element={<UsersPage />} />
+              <Route path="/account" element={<AccountPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
         </Content>
       </Layout>
     </Layout>

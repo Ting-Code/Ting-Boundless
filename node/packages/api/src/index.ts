@@ -7,6 +7,7 @@ export {
   ApiError,
   apiFetch,
   apiUpload,
+  isApiError,
   resolveApiUrl,
   type ApiFetchOptions,
 } from './request';

@@ -12,7 +12,6 @@ import (
 	"github.com/ting-boundless/boundless/pkg/config"
 	"github.com/ting-boundless/boundless/pkg/db"
 	"github.com/ting-boundless/boundless/pkg/httpx"
-	"github.com/ting-boundless/boundless/pkg/identity"
 	"github.com/ting-boundless/boundless/pkg/logger"
 	"github.com/ting-boundless/boundless/services/user-service/internal/list"
 	"github.com/ting-boundless/boundless/services/user-service/internal/me"
@@ -45,12 +44,12 @@ func main() {
 	health := httpx.NewHealth()
 	db.RegisterHealth(health, "postgres", pg.Probe)
 
-	meHandler := identity.Middleware(me.New(users))
+	meHandler := httpx.TrustedAuth(me.New(users))
 
 	mux := http.NewServeMux()
 	health.Handler(mux)
 	mux.Handle("/v1/users/me", meHandler)
-	mux.Handle("GET /v1/users/", identity.Middleware(httpx.RequireRole("admin")(list.New(users))))
+	mux.Handle("GET /v1/users/", httpx.TrustedRole("admin")(list.New(users)))
 
 	internalToken, ok := httpx.LoadInternalToken(log)
 	if !ok {

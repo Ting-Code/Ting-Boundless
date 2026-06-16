@@ -44,3 +44,11 @@ export function identityFromHeaders(headers: Record<string, string | string[] | 
     subject: pick(IDENTITY_HEADERS.subject),
   };
 }
+
+export function isAuthenticated(id: Identity | undefined): boolean {
+  return Boolean(id?.userId);
+}
+
+export function hasRole(id: Identity | undefined, role: string): boolean {
+  return id?.roles.includes(role) ?? false;
+}

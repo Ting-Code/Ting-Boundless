@@ -4,7 +4,6 @@ import {
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import type {
   BusinessItem,
@@ -50,19 +49,8 @@ export class ItemsService {
     return this.db;
   }
 
-  private requireActor(id: Identity): Identity {
-    if (!id.userId) {
-      throw new UnauthorizedException({
-        code: 'auth.unauthenticated',
-        message: 'missing trusted identity (call through Gateway)',
-      });
-    }
-    return id;
-  }
-
   async list(actor: Identity): Promise<ListItemsResponse> {
     const db = this.requireDb();
-    this.requireActor(actor);
     const tenantId = actor.tenantId ?? '';
 
     const rows = await db
@@ -77,7 +65,6 @@ export class ItemsService {
 
   async create(actor: Identity, input: CreateItemRequest): Promise<CreateItemResponse> {
     const db = this.requireDb();
-    this.requireActor(actor);
 
     const title = input.title?.trim();
     if (!title) {
@@ -141,7 +128,6 @@ export class ItemsService {
 
   async update(actor: Identity, id: string, input: UpdateItemRequest): Promise<GetItemResponse> {
     const db = this.requireDb();
-    this.requireActor(actor);
 
     const title = input.title?.trim();
     const body = input.body?.trim();
@@ -213,7 +199,6 @@ export class ItemsService {
 
   async remove(actor: Identity, id: string): Promise<void> {
     const db = this.requireDb();
-    this.requireActor(actor);
     const tenantId = actor.tenantId ?? '';
 
     await this.findOwned(actor, id);
@@ -251,7 +236,6 @@ export class ItemsService {
 
   private async findOwned(actor: Identity, id: string): Promise<typeof items.$inferSelect> {
     const db = this.requireDb();
-    this.requireActor(actor);
     const tenantId = actor.tenantId ?? '';
 
     const [row] = await db

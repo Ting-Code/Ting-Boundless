@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ting-boundless/boundless/pkg/httpx"
 	"github.com/ting-boundless/boundless/pkg/identity"
 	"github.com/ting-boundless/boundless/services/user-service/internal/me"
 	"github.com/ting-boundless/boundless/services/user-service/internal/store"
@@ -28,16 +29,20 @@ func (s *stubUsers) UpdateDisplayName(_ context.Context, id identity.Identity, n
 	return u, nil
 }
 
+func meHandler(users *stubUsers) http.Handler {
+	return httpx.TrustedAuth(me.New(users))
+}
+
 func TestHandler_GetMe(t *testing.T) {
 	created := time.Date(2026, 1, 2, 3, 0, 0, 0, time.UTC)
-	h := me.New(&stubUsers{
+	h := meHandler(&stubUsers{
 		user: store.User{ID: "u1", TenantID: "t1", DisplayName: "Alice", CreatedAt: created, UpdatedAt: created},
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/users/me", nil)
-	req = req.WithContext(identity.NewContext(req.Context(), identity.Identity{
+	identity.Identity{
 		UserID: "u1", TenantID: "t1", Roles: []string{"admin"}, RequestID: "r1",
-	}))
+	}.Inject(req.Header)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
@@ -47,15 +52,13 @@ func TestHandler_GetMe(t *testing.T) {
 }
 
 func TestHandler_PatchDisplayName(t *testing.T) {
-	h := me.New(&stubUsers{
+	h := meHandler(&stubUsers{
 		user: store.User{ID: "u1", DisplayName: "old"},
 	})
 
 	req := httptest.NewRequest(http.MethodPatch, "/v1/users/me", strings.NewReader(`{"display_name":"新名字"}`))
 	req.Header.Set("Content-Type", "application/json")
-	req = req.WithContext(identity.NewContext(req.Context(), identity.Identity{
-		UserID: "u1", RequestID: "r1",
-	}))
+	identity.Identity{UserID: "u1", RequestID: "r1"}.Inject(req.Header)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
@@ -65,13 +68,11 @@ func TestHandler_PatchDisplayName(t *testing.T) {
 }
 
 func TestHandler_PatchRequiresDisplayName(t *testing.T) {
-	h := me.New(&stubUsers{})
+	h := meHandler(&stubUsers{})
 
 	req := httptest.NewRequest(http.MethodPatch, "/v1/users/me", strings.NewReader(`{}`))
 	req.Header.Set("Content-Type", "application/json")
-	req = req.WithContext(identity.NewContext(req.Context(), identity.Identity{
-		UserID: "u1", RequestID: "r1",
-	}))
+	identity.Identity{UserID: "u1", RequestID: "r1"}.Inject(req.Header)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
@@ -81,7 +82,7 @@ func TestHandler_PatchRequiresDisplayName(t *testing.T) {
 }
 
 func TestHandler_Unauthenticated(t *testing.T) {
-	h := me.New(&stubUsers{})
+	h := meHandler(&stubUsers{})
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/v1/users/me", nil))
 	if rr.Code != http.StatusUnauthorized {

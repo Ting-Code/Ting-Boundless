@@ -91,8 +91,45 @@ paths:
             application/json:
               schema:
                 $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Not owner
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
         '401':
           description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+
+    delete:
+      operationId: deleteFile
+      summary: Delete file metadata and object (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: 'common.v1.yaml#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Not owner
           content:
             application/json:
               schema:

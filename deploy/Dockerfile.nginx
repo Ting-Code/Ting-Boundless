@@ -12,6 +12,9 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @ting/api build && pnpm --filter @ting/admin build
 
 FROM nginx:1.27-alpine
-COPY deploy/nginx/nginx.conf /etc/nginx/nginx.conf
+ARG NGINX_MAIN=nginx.conf
+COPY deploy/nginx/${NGINX_MAIN} /etc/nginx/nginx.conf
+COPY deploy/nginx/server-locations.inc /etc/nginx/server-locations.inc
+COPY deploy/nginx/ssl-params.inc /etc/nginx/ssl-params.inc
 COPY deploy/nginx/proxy.conf /etc/nginx/proxy.conf
 COPY --from=admin-build /repo/node/apps/admin/dist /usr/share/nginx/html/admin

@@ -13,7 +13,6 @@ import (
 	"github.com/ting-boundless/boundless/pkg/config"
 	"github.com/ting-boundless/boundless/pkg/db"
 	"github.com/ting-boundless/boundless/pkg/httpx"
-	"github.com/ting-boundless/boundless/pkg/identity"
 	"github.com/ting-boundless/boundless/pkg/logger"
 	"github.com/ting-boundless/boundless/services/audit-service/internal/ingest"
 	"github.com/ting-boundless/boundless/services/audit-service/internal/query"
@@ -29,11 +28,12 @@ func main() {
 
 	ctx := context.Background()
 	auditDB := httpx.Env("AUDIT_DB", "audit_db")
-	cfg := db.ConfigFromEnv(auditDB)
-	pg := db.Connect(ctx, log, auditDB)
+	migrateCfg := db.ConfigFromEnv(auditDB)
+	runtimeCfg := db.AuditConfigFromEnv(auditDB)
+	pg := db.ConnectWithConfig(ctx, log, runtimeCfg)
 	if pg.DB != nil {
 		defer pg.DB.Close()
-		if err := db.RunMigrations(cfg, serviceName); err != nil {
+		if err := db.RunMigrations(migrateCfg, serviceName); err != nil {
 			log.Error("migrations failed", slog.Any("error", err))
 			return
 		}
@@ -57,9 +57,7 @@ func main() {
 	mux.Handle("POST /internal/audit/events",
 		httpx.InternalAuth(internalToken)(ingest.New(events)),
 	)
-	mux.Handle("GET /v1/audit/events",
-		identity.Middleware(httpx.RequireRole("admin")(query.New(events))),
-	)
+	mux.Handle("GET /v1/audit/events", httpx.TrustedRole("admin")(query.New(events)))
 
 	h := httpx.Chain(mux,
 		httpx.GatewayTrust(internalToken),

@@ -28,13 +28,20 @@ make run-admin
 
 | Route | API | 说明 |
 |-------|-----|------|
-| `/admin/items` | `businessPaths.*` | 业务条目 CRUD |
-| `/admin/files` | `filePaths.*` | 上传 / 列表 / 预签名下载 |
+| `/admin/` | `businessPaths.ping` + 统计 | 概览：服务状态、条目/文件/用户计数 |
+| `/admin/items` | `businessPaths.*` | 业务条目 CRUD + 详情抽屉 |
+| `/admin/files` | `filePaths.*` | 上传 / 列表 / 下载 / 删除 / 详情抽屉 |
 | `/admin/account` | `businessPaths.me`, `userPaths.me` | 身份 + 显示名称 |
 | `/admin/audit` | `auditPaths.events` | 审计事件列表 + 详情抽屉（需 admin 角色） |
 | `/admin/users` | `userPaths.list` | 当前租户用户列表（需 admin 角色） |
 
-未登录时跳转 Gateway `/sign-in`。
+未登录时跳转 Gateway `/sign-in`（401 由 `useApiQuery` + 全局 QueryCache 自动跳转）。
+
+## 开发说明
+
+- `src/hooks/useApiQuery.ts` — 带 `authReturnTo` 的 TanStack Query 封装
+- `src/hooks/useAuthMutation.ts` — mutation 401 自动跳转 sign-in
+- `src/lib/queryClient.ts` — 401 全局重定向至 BFF sign-in
 
 ## OpenAPI 域
 

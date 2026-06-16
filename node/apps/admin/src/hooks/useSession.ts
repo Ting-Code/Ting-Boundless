@@ -1,20 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
-import { apiFetch, ApiError, businessPaths, type BusinessMeResponse } from '@ting/api';
-import { redirectToSignIn } from '../config/auth';
+import { apiFetch, businessPaths, type BusinessMeResponse } from '@ting/api';
+import { useApiQuery } from './useApiQuery';
 
-export function useSession(_returnTo = '/admin/items') {
-  return useQuery({
+export function useSession(returnTo = '/admin/items') {
+  return useApiQuery({
     queryKey: ['business', 'me'],
     queryFn: () => apiFetch<BusinessMeResponse>(businessPaths.me),
-    retry: false,
+    authReturnTo: returnTo,
   });
 }
 
-/** Call after query/mutation errors to redirect on 401. */
-export function handleAuthError(err: unknown, returnTo = '/admin/items'): boolean {
-  if (err instanceof ApiError && err.status === 401) {
-    redirectToSignIn(returnTo);
-    return true;
-  }
-  return false;
-}
+export { handleAuthError } from './authError';

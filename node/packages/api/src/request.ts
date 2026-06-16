@@ -12,6 +12,10 @@ export class ApiError extends Error {
   }
 }
 
+export function isApiError(err: unknown): err is ApiError {
+  return err instanceof ApiError;
+}
+
 /** Join gateway base URL with a relative API path (SSR / server-side). */
 export function resolveApiUrl(path: string, baseUrl = ''): string {
   if (path.startsWith('http://') || path.startsWith('https://')) {

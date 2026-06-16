@@ -10,7 +10,6 @@ import (
 	"github.com/ting-boundless/boundless/pkg/config"
 	"github.com/ting-boundless/boundless/pkg/db"
 	"github.com/ting-boundless/boundless/pkg/httpx"
-	"github.com/ting-boundless/boundless/pkg/identity"
 	"github.com/ting-boundless/boundless/pkg/logger"
 	"github.com/ting-boundless/boundless/pkg/storage"
 	"github.com/ting-boundless/boundless/services/file-service/internal/access"
@@ -72,12 +71,12 @@ func main() {
 
 	mux := http.NewServeMux()
 	health.Handler(mux)
-	mux.Handle("POST /v1/files/", identity.Middleware(uploadHandler))
-	mux.Handle("GET /v1/files/", identity.Middleware(access.NewList(accessCfg)))
-	mux.Handle("GET /v1/files/{id}", identity.Middleware(access.NewMeta(accessCfg)))
-	mux.Handle("GET /v1/files/{id}/download", identity.Middleware(access.NewDownload(accessCfg)))
-	mux.Handle("GET /v1/files/{id}/url", identity.Middleware(access.NewURL(accessCfg)))
-	mux.Handle("DELETE /v1/files/{id}", identity.Middleware(access.NewDelete(accessCfg)))
+	mux.Handle("POST /v1/files/", httpx.TrustedAuth(uploadHandler))
+	mux.Handle("GET /v1/files/", httpx.TrustedAuth(access.NewList(accessCfg)))
+	mux.Handle("GET /v1/files/{id}", httpx.TrustedAuth(access.NewMeta(accessCfg)))
+	mux.Handle("GET /v1/files/{id}/download", httpx.TrustedAuth(access.NewDownload(accessCfg)))
+	mux.Handle("GET /v1/files/{id}/url", httpx.TrustedAuth(access.NewURL(accessCfg)))
+	mux.Handle("DELETE /v1/files/{id}", httpx.TrustedAuth(access.NewDelete(accessCfg)))
 
 	internalToken, ok := httpx.LoadInternalToken(log)
 	if !ok {

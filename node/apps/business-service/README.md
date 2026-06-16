@@ -3,6 +3,7 @@
 NestJS + Drizzle domain service. Primary API under `/v1/business/*`.
 
 - Trusts **Gateway-injected identity headers** only (no end-user JWT parsing).
+- `RequireAuthenticatedMiddleware` on all routes except health/metrics and `/v1/business/ping` (mirrors Go `httpx.TrustedAuth`).
 - Exposes `/healthz`, `/readyz`, `/metrics` per platform baseline.
 - Uses `@ting/api` for shared API types and paths.
 
@@ -14,7 +15,7 @@ NestJS + Drizzle domain service. Primary API under `/v1/business/*`.
 | GET | `/readyz` | Postgres probe |
 | GET | `/metrics` | Prometheus |
 | GET | `/v1/business/ping` | Smoke test |
-| GET | `/v1/business/me` | Echo trusted identity (requires `X-User-Id`) |
+| GET | `/v1/business/me` | Echo trusted identity (requires auth via middleware) |
 | GET | `/v1/business/items` | List items (tenant-scoped) |
 | POST | `/v1/business/items` | Create item + outbox event + optional MQ job |
 | GET | `/v1/business/items/{id}` | Get item by id (tenant-scoped) |
@@ -51,6 +52,8 @@ pnpm dev
 ```
 
 Default listen: `:3005` (`BUSINESS_HTTP_ADDR`; avoids Logto on `:3001`).
+
+**Auth:** `RequireAuthenticatedMiddleware` rejects unauthenticated requests on all routes except `/healthz`, `/readyz`, `/metrics`, and `GET /v1/business/ping`.
 
 ## Observability
 

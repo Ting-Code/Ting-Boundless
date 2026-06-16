@@ -1,25 +1,31 @@
 import { Alert, Button, Space, Typography } from 'antd';
-import { signInPath } from '../config/auth';
+import { useLocation } from 'react-router-dom';
+import { adminReturnTo, signInPath, signOutPath } from '../config/auth';
 import { useSession } from '../hooks/useSession';
-import { ApiError } from '@ting/api';
+import { isApiError } from '@ting/api';
 
 export function SessionBar() {
-  const me = useSession();
+  const location = useLocation();
+  const returnTo = adminReturnTo(location.pathname);
+  const me = useSession(returnTo);
+
+  const devLogin = import.meta.env.VITE_DEV_LOGIN === 'true';
+  const loginLabel = devLogin ? '开发环境登录' : '登录';
 
   if (me.isLoading) {
     return <Typography.Text type="secondary">正在检查登录状态…</Typography.Text>;
   }
 
   if (me.isError) {
-    const unauthorized = me.error instanceof ApiError && me.error.status === 401;
+    const unauthorized = isApiError(me.error) && me.error.status === 401;
     if (unauthorized) {
       return (
         <Alert
           type="warning"
           message="未登录"
           action={
-            <Button size="small" href={signInPath('/admin/items')}>
-              {import.meta.env.VITE_DEV_LOGIN === 'true' ? '开发环境登录' : '登录'}
+            <Button size="small" href={signInPath(returnTo)}>
+              {loginLabel}
             </Button>
           }
         />
@@ -41,8 +47,8 @@ export function SessionBar() {
         type="warning"
         message="未登录"
         action={
-          <Button size="small" href={signInPath('/admin/items')}>
-            {import.meta.env.VITE_DEV_LOGIN === 'true' ? '开发环境登录' : '登录'}
+          <Button size="small" href={signInPath(returnTo)}>
+            {loginLabel}
           </Button>
         }
       />
@@ -66,7 +72,7 @@ export function SessionBar() {
           </>
         ) : null}
       </Typography.Text>
-      <Button size="small" href="/sign-out?return_to=/admin/items">
+      <Button size="small" href={signOutPath(returnTo)}>
         退出
       </Button>
     </Space>

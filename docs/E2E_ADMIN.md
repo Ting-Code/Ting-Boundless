@@ -34,6 +34,7 @@ Flow:
 3. `GET /v1/business/me`
 4. `POST` + `GET /v1/business/items`
 5. `GET /v1/audit/events` (requires audit-service + `admin` role)
+6. `GET /v1/users/` (requires user-service + `admin` role)
 
 ## Browser: Admin SPA
 

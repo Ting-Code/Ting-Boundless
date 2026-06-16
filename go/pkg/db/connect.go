@@ -18,7 +18,11 @@ type ConnectResult struct {
 // Connect opens PostgreSQL when configured for local use, or registers a failing
 // readiness probe when the host is a cloud placeholder.
 func Connect(ctx context.Context, log *slog.Logger, database string) ConnectResult {
-	cfg := ConfigFromEnv(database)
+	return ConnectWithConfig(ctx, log, ConfigFromEnv(database))
+}
+
+// ConnectWithConfig opens PostgreSQL using an explicit config.
+func ConnectWithConfig(ctx context.Context, log *slog.Logger, cfg Config) ConnectResult {
 	if config.IsPlaceholder(cfg.Host) {
 		log.Warn("postgres skipped (cloud placeholder)",
 			slog.String("host", cfg.Host),

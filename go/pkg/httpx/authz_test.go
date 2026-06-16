@@ -11,16 +11,15 @@ import (
 
 func TestRequireRole_AllowsAdmin(t *testing.T) {
 	var called bool
-	h := httpx.RequireRole("admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := httpx.TrustedRole("admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	h = identity.Middleware(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req = req.WithContext(identity.NewContext(req.Context(), identity.Identity{
+	identity.Identity{
 		UserID: "u1", Roles: []string{"admin"}, RequestID: "r1",
-	}))
+	}.Inject(req.Header)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
@@ -30,15 +29,14 @@ func TestRequireRole_AllowsAdmin(t *testing.T) {
 }
 
 func TestRequireRole_Forbidden(t *testing.T) {
-	h := httpx.RequireRole("admin")(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	h := httpx.TrustedRole("admin")(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("should not run")
 	}))
-	h = identity.Middleware(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req = req.WithContext(identity.NewContext(req.Context(), identity.Identity{
+	identity.Identity{
 		UserID: "u1", Roles: []string{"user"}, RequestID: "r1",
-	}))
+	}.Inject(req.Header)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 

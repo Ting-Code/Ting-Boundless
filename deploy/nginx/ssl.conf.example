@@ -1,7 +1,10 @@
-# Optional: include from nginx.conf inside the HTTPS server block.
-# Mount certs to /etc/nginx/certs/ (fullchain.pem + privkey.pem).
+# Production TLS nginx config (see nginx.prod.conf).
+# Certs: mount fullchain.pem + privkey.pem to /etc/nginx/certs/
 #
-#   listen 443 ssl http2;
-#   ssl_certificate     /etc/nginx/certs/fullchain.pem;
-#   ssl_certificate_key /etc/nginx/certs/privkey.pem;
-#   ssl_protocols TLSv1.2 TLSv1.3;
+# Local certbot example:
+#   certbot certonly --standalone -d api.example.com
+#   cp /etc/letsencrypt/live/api.example.com/fullchain.pem deploy/nginx/certs/
+#   cp /etc/letsencrypt/live/api.example.com/privkey.pem deploy/nginx/certs/
+#
+# CVM: docker compose -f deploy/docker-compose.prod.yml up -d
+# TCR nginx image is built with NGINX_MAIN=nginx.prod.conf (see Dockerfile.nginx).

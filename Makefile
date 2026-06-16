@@ -23,8 +23,8 @@ test: ## Run Go tests
 	cd $(GO_DIR) && go test ./...
 
 .PHONY: lint
-lint: ## Run golangci-lint if installed
-	@command -v golangci-lint >/dev/null 2>&1 && cd $(GO_DIR) && golangci-lint run || echo "golangci-lint not installed; skipping"
+lint: ## Run golangci-lint (install: https://golangci-lint.run/welcome/install/)
+	cd $(GO_DIR) && golangci-lint run
 
 .PHONY: run-%
 run-%: ## Run a single Go service, e.g. make run-gateway
@@ -97,6 +97,14 @@ down-obs: ## Stop observability stack
 node-build: generate-api ## Build logger + @ting/api + Nest business-service
 	cd node && pnpm --filter @ting/logger build && pnpm --filter @ting/api build && pnpm --filter @ting/business-service build
 
+.PHONY: node-typecheck
+node-typecheck: generate-api ## Typecheck admin + business-service (requires pnpm install)
+	cd node && pnpm typecheck
+
+.PHONY: node-test
+node-test: ## Run @ting/api unit tests
+	cd node && pnpm test
+
 .PHONY: run-business
 run-business: ## Run Nest business-service (:3005)
 	cd node && pnpm --filter @ting/logger build && pnpm --filter @ting/api build && pnpm dev:business
@@ -138,4 +146,4 @@ up-logto: ## Start Logto only (Docker; see docs/LOGTO_SETUP.md for native)
 	docker compose -f deploy/docker-compose.logto.yml up -d
 
 .PHONY: ci
-ci: tidy vet build test ## Local CI bundle (go job subset; full CI includes buf + node + Trivy)
+ci: tidy vet build test node-test node-typecheck ## Local CI bundle (go + node subset; full CI includes buf + Trivy)

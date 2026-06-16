@@ -1,35 +1,45 @@
 import { useEffect } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   apiFetch,
-  ApiError,
   businessPaths,
+  isApiError,
   userPaths,
   type BusinessMeResponse,
   type UserMeResponse,
 } from '@ting/api';
-import { Alert, Button, Card, Descriptions, Form, Input, Typography, message } from 'antd';
+import { Alert, Button, Card, Descriptions, Form, Input, message } from 'antd';
 import { signInPath } from '../config/auth';
+import { PageShell } from '../components/PageShell';
+import { QueryErrorAlert } from '../components/QueryErrorAlert';
+import { useApiQuery } from '../hooks/useApiQuery';
+import { useAuthMutation } from '../hooks/useAuthMutation';
 import { handleAuthError } from '../hooks/useSession';
 
 export function AccountPage() {
   const queryClient = useQueryClient();
   const [form] = Form.useForm<{ display_name: string }>();
 
-  const me = useQuery({
+  const me = useApiQuery({
     queryKey: ['business', 'me'],
     queryFn: () => apiFetch<BusinessMeResponse>(businessPaths.me),
-    retry: false,
+    authReturnTo: '/admin/account',
   });
 
-  const profile = useQuery({
+  const profile = useApiQuery({
     queryKey: ['user', 'me'],
     queryFn: () => apiFetch<UserMeResponse>(userPaths.me),
     enabled: Boolean(me.data?.user_id),
-    retry: false,
+    authReturnTo: '/admin/account',
   });
 
-  const saveProfile = useMutation({
+  useEffect(() => {
+    if (profile.data?.display_name !== undefined) {
+      form.setFieldsValue({ display_name: profile.data.display_name });
+    }
+  }, [form, profile.data?.display_name]);
+
+  const saveProfile = useAuthMutation('/admin/account', {
     mutationFn: (display_name: string) =>
       apiFetch<UserMeResponse>(userPaths.me, {
         method: 'PATCH',
@@ -40,63 +50,46 @@ export function AccountPage() {
       message.success('显示名称已更新');
     },
     onError: (err: unknown) => {
-      message.error(err instanceof Error ? err.message : '更新失败');
+      message.error(isApiError(err) ? err.message : '更新失败');
     },
   });
 
-  if (me.isError && handleAuthError(me.error)) {
+  if (me.isError && handleAuthError(me.error, '/admin/account')) {
     return null;
   }
 
   if (me.isLoading) {
-    return <Typography.Text type="secondary">加载中…</Typography.Text>;
+    return <PageShell title="账户">加载中…</PageShell>;
   }
 
   if (me.isError) {
-    const unauthorized = me.error instanceof ApiError && me.error.status === 401;
     return (
-      <Alert
-        type={unauthorized ? 'warning' : 'error'}
-        message={unauthorized ? '未登录' : '加载失败'}
-        description={
-          unauthorized ? (
-            <a href={signInPath('/admin/account')}>前往登录</a>
-          ) : me.error instanceof Error ? (
-            me.error.message
-          ) : (
-            String(me.error)
-          )
-        }
-      />
+      <PageShell title="账户">
+        <QueryErrorAlert error={me.error} returnTo="/admin/account" />
+      </PageShell>
     );
   }
 
   const user = me.data;
   if (!user?.user_id) {
     return (
-      <Alert
-        type="warning"
-        message="未登录"
-        description={<a href={signInPath('/admin/account')}>前往登录</a>}
-      />
+      <PageShell title="账户">
+        <Alert
+          type="warning"
+          message="未登录"
+          description={<a href={signInPath('/admin/account')}>前往登录</a>}
+        />
+      </PageShell>
     );
   }
 
-  const profileData = profile.data;
-
-  useEffect(() => {
-    if (profileData?.display_name !== undefined) {
-      form.setFieldsValue({ display_name: profileData.display_name });
-    }
-  }, [form, profileData?.display_name]);
-
   return (
-    <>
-      <Typography.Title level={3} style={{ marginTop: 0 }}>
-        账户
-      </Typography.Title>
+    <PageShell title="账户">
       <Card title="身份" style={{ marginBottom: 16 }}>
         <Descriptions column={1} bordered size="small">
+          <Descriptions.Item label="显示名称">
+            {profile.data?.display_name || '—'}
+          </Descriptions.Item>
           <Descriptions.Item label="用户 ID">{user.user_id}</Descriptions.Item>
           <Descriptions.Item label="租户 ID">{user.tenant_id || '—'}</Descriptions.Item>
           <Descriptions.Item label="Subject">{user.subject || '—'}</Descriptions.Item>
@@ -111,7 +104,7 @@ export function AccountPage() {
       </Card>
       <Card title="个人资料" loading={profile.isLoading}>
         {profile.isError ? (
-          <Alert type="error" message="无法加载个人资料" />
+          <QueryErrorAlert error={profile.error} returnTo="/admin/account" />
         ) : (
           <Form
             form={form}
@@ -132,6 +125,6 @@ export function AccountPage() {
           </Form>
         )}
       </Card>
-    </>
+    </PageShell>
   );
 }

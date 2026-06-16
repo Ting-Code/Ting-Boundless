@@ -10,12 +10,17 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/ting-boundless/boundless/pkg/httpx"
 	"github.com/ting-boundless/boundless/pkg/identity"
 	"github.com/ting-boundless/boundless/services/file-service/internal/store"
 )
 
+func authedUpload(cfg Config) http.Handler {
+	return httpx.TrustedAuth(New(cfg))
+}
+
 func TestHandler_RequiresFileField(t *testing.T) {
-	h := New(Config{
+	h := authedUpload(Config{
 		Files: storeStub{},
 		S3:    &s3Stub{enabled: true},
 		Log:   slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -27,7 +32,7 @@ func TestHandler_RequiresFileField(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/files/", body)
 	req.Header.Set("Content-Type", w.FormDataContentType())
-	req = req.WithContext(identity.NewContext(req.Context(), identity.Identity{UserID: "u1", RequestID: "r1"}))
+	identity.Identity{UserID: "u1", RequestID: "r1"}.Inject(req.Header)
 
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
@@ -38,7 +43,7 @@ func TestHandler_RequiresFileField(t *testing.T) {
 }
 
 func TestHandler_RequiresIdentity(t *testing.T) {
-	h := New(Config{S3: &s3Stub{enabled: true}})
+	h := authedUpload(Config{S3: &s3Stub{enabled: true}})
 
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/v1/files/", nil))

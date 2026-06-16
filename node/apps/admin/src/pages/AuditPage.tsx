@@ -1,70 +1,54 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import {
   apiFetch,
-  ApiError,
   auditPaths,
   type AuditEvent,
   type ListAuditEventsResponse,
 } from '@ting/api';
-import { Alert, Button, Card, Descriptions, Drawer, Select, Space, Table, Typography } from 'antd';
-import { useMemo, useState } from 'react';
-import { signInPath } from '../config/auth';
+import { Button, Card, Descriptions, Drawer, Select, Space, Table, Typography } from 'antd';
+import { PageShell } from '../components/PageShell';
+import { QueryErrorAlert } from '../components/QueryErrorAlert';
+import { useApiQuery } from '../hooks/useApiQuery';
 import { handleAuthError } from '../hooks/useSession';
+import { formatDateTime } from '../utils/format';
 
 export function AuditPage() {
   const [typeFilter, setTypeFilter] = useState<string | undefined>();
   const [sourceFilter, setSourceFilter] = useState<string | undefined>();
   const [selected, setSelected] = useState<AuditEvent | null>(null);
 
-  const queryPath = useMemo(() => {
-    const params = new URLSearchParams({ limit: '50' });
-    if (typeFilter) {
-      params.set('type', typeFilter);
-    }
-    if (sourceFilter) {
-      params.set('source', sourceFilter);
-    }
-    return `${auditPaths.events}?${params}`;
-  }, [typeFilter, sourceFilter]);
-
-  const eventsQuery = useQuery({
-    queryKey: ['audit', 'events', typeFilter, sourceFilter],
-    queryFn: () => apiFetch<ListAuditEventsResponse>(queryPath),
-    retry: false,
+  const queryPath = auditPaths.eventsQuery({
+    limit: 50,
+    type: typeFilter,
+    source: sourceFilter,
   });
 
-  if (eventsQuery.isError && handleAuthError(eventsQuery.error)) {
+  const eventsQuery = useApiQuery({
+    queryKey: ['audit', 'events', typeFilter, sourceFilter],
+    queryFn: () => apiFetch<ListAuditEventsResponse>(queryPath),
+    authReturnTo: '/admin/audit',
+  });
+
+  if (eventsQuery.isError && handleAuthError(eventsQuery.error, '/admin/audit')) {
     return null;
   }
 
   if (eventsQuery.isError) {
-    const err = eventsQuery.error;
-    const unauthorized = err instanceof ApiError && err.status === 401;
-    const forbidden = err instanceof ApiError && err.status === 403;
     return (
-      <Alert
-        type={unauthorized || forbidden ? 'warning' : 'error'}
-        message={unauthorized ? '未登录' : forbidden ? '无权限' : '加载失败'}
-        description={
-          unauthorized ? (
-            <a href={signInPath('/admin/audit')}>前往登录</a>
-          ) : err instanceof Error ? (
-            err.message
-          ) : (
-            String(err)
-          )
-        }
-      />
+      <PageShell title="审计日志">
+        <QueryErrorAlert
+          error={eventsQuery.error}
+          returnTo="/admin/audit"
+          forbiddenMessage="无权限（需要 admin 角色）"
+        />
+      </PageShell>
     );
   }
 
   const events = eventsQuery.data?.events ?? [];
 
   return (
-    <>
-      <Typography.Title level={3} style={{ marginTop: 0 }}>
-        审计日志
-      </Typography.Title>
+    <PageShell title="审计日志">
       <Card>
         <Space style={{ marginBottom: 16 }} wrap>
           <Select
@@ -102,7 +86,7 @@ export function AuditPage() {
           size="small"
           scroll={{ x: true }}
           columns={[
-            { title: '时间', dataIndex: 'time', width: 180 },
+            { title: '时间', dataIndex: 'time', width: 180, render: (v: string) => formatDateTime(v) },
             { title: '类型', dataIndex: 'type', width: 200 },
             { title: '来源', dataIndex: 'source', width: 140 },
             { title: '主体', dataIndex: 'subject', ellipsis: true },
@@ -120,7 +104,14 @@ export function AuditPage() {
               width: 72,
               fixed: 'right',
               render: (_: unknown, record: AuditEvent) => (
-                <Button type="link" size="small" onClick={() => setSelected(record)}>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelected(record);
+                  }}
+                >
                   详情
                 </Button>
               ),
@@ -144,8 +135,8 @@ export function AuditPage() {
               <Descriptions.Item label="ID">{selected.id}</Descriptions.Item>
               <Descriptions.Item label="类型">{selected.type}</Descriptions.Item>
               <Descriptions.Item label="来源">{selected.source}</Descriptions.Item>
-              <Descriptions.Item label="时间">{selected.time}</Descriptions.Item>
-              <Descriptions.Item label="接收时间">{selected.received_at}</Descriptions.Item>
+              <Descriptions.Item label="时间">{formatDateTime(selected.time)}</Descriptions.Item>
+              <Descriptions.Item label="接收时间">{formatDateTime(selected.received_at)}</Descriptions.Item>
               <Descriptions.Item label="主体">{selected.subject ?? '—'}</Descriptions.Item>
               <Descriptions.Item label="租户">{selected.tenant_id ?? '—'}</Descriptions.Item>
               <Descriptions.Item label="操作者">{selected.actor_user_id ?? '—'}</Descriptions.Item>
@@ -168,6 +159,6 @@ export function AuditPage() {
           </>
         ) : null}
       </Drawer>
-    </>
+    </PageShell>
   );
 }

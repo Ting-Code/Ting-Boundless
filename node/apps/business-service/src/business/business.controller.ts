@@ -1,4 +1,4 @@
-import { Controller, Get, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import type { BusinessMeResponse, BusinessPingResponse } from '@ting/api';
 import { CurrentIdentity } from '../common/identity/current-identity.decorator';
 import type { Identity } from '../common/identity/identity';
@@ -12,12 +12,6 @@ export class BusinessController {
 
   @Get('me')
   me(@CurrentIdentity() id: Identity): BusinessMeResponse {
-    if (!id.userId) {
-      throw new UnauthorizedException({
-        code: 'auth.unauthenticated',
-        message: 'missing trusted identity (call through Gateway)',
-      });
-    }
     return {
       user_id: id.userId,
       tenant_id: id.tenantId,

@@ -11,7 +11,7 @@ File upload/download over S3-compatible storage (MinIO / Aliyun OSS).
 | GET | `/v1/files/{id}/url` | Presigned GET URL (`?expires=` seconds, default `FILE_PRESIGN_SECONDS`) |
 | DELETE | `/v1/files/{id}` | Delete object + metadata (owner only) |
 
-Identity from Gateway headers only (`identity.Middleware`).
+// Identity from Gateway headers only (`httpx.TrustedAuth`).
 
 ## Data
 

@@ -71,7 +71,8 @@ sudo cp /etc/letsencrypt/live/api.example.com/fullchain.pem deploy/nginx/certs/
 sudo cp /etc/letsencrypt/live/api.example.com/privkey.pem deploy/nginx/certs/
 ```
 
-Add `listen 443 ssl` to `deploy/nginx/nginx.conf` (see `deploy/nginx/ssl.conf.example`).
+Use `deploy/nginx/nginx.prod.conf` (HTTP→HTTPS redirect + TLS on :443). TCR nginx image
+is built with `NGINX_MAIN=nginx.prod.conf`; CVM compose also mounts configs from the repo.
 
 ## 4. GitHub Secrets
 

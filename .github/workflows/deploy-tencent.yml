@@ -74,6 +74,7 @@ jobs:
         run: |
           docker buildx build \
             --file deploy/Dockerfile.nginx \
+            --build-arg NGINX_MAIN=nginx.prod.conf \
             --tag "${PREFIX}/nginx:${TAG}" \
             --tag "${PREFIX}/nginx:latest" \
             --push \

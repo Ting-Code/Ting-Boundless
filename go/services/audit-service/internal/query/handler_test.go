@@ -24,14 +24,14 @@ func (stubEvents) List(context.Context, store.ListFilter) ([]store.EventRow, err
 }
 
 func adminHandler() http.Handler {
-	return identity.Middleware(httpx.RequireRole("admin")(query.New(stubEvents{})))
+	return httpx.TrustedRole("admin")(query.New(stubEvents{}))
 }
 
 func TestHandler_ListRequiresAdmin(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/audit/events", nil)
-	req = req.WithContext(identity.NewContext(req.Context(), identity.Identity{
+	identity.Identity{
 		UserID: "u1", RequestID: "r1", Roles: []string{"user"},
-	}))
+	}.Inject(req.Header)
 	rr := httptest.NewRecorder()
 	adminHandler().ServeHTTP(rr, req)
 	if rr.Code != http.StatusForbidden {
@@ -41,9 +41,9 @@ func TestHandler_ListRequiresAdmin(t *testing.T) {
 
 func TestHandler_ListOK(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/audit/events", nil)
-	req = req.WithContext(identity.NewContext(req.Context(), identity.Identity{
+	identity.Identity{
 		UserID: "u1", TenantID: "t1", RequestID: "r1", Roles: []string{"admin"},
-	}))
+	}.Inject(req.Header)
 	rr := httptest.NewRecorder()
 	adminHandler().ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "business.item.created") {

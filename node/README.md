@@ -46,6 +46,8 @@ pnpm dev:business    # Nest, default :3005
 pnpm dev:admin       # Vite admin
 pnpm generate:api
 pnpm build           # logger + api + business-service + admin
+pnpm typecheck       # tsc --noEmit for admin + business-service
+pnpm test            # @ting/api vitest
 ```
 
 From repo root: `make run-admin`, `make run-business`, `make generate-api`.

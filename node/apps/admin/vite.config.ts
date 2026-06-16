@@ -12,6 +12,29 @@ const proxyCommon = {
 export default defineConfig({
   plugins: [react()],
   base: '/admin/',
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) {
+            return 'vendor-react';
+          }
+          if (id.includes('node_modules/react-router')) {
+            return 'vendor-router';
+          }
+          if (id.includes('node_modules/@tanstack/react-query')) {
+            return 'vendor-query';
+          }
+          if (id.includes('node_modules/antd') || id.includes('node_modules/@ant-design')) {
+            return 'vendor-antd';
+          }
+          if (id.includes('node_modules/rc-')) {
+            return 'vendor-antd';
+          }
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

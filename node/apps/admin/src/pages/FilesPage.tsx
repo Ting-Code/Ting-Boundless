@@ -1,53 +1,54 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Card, Space, Table, Typography, Upload, message } from 'antd';
+import { useQueryClient } from '@tanstack/react-query';
+import { Button, Card, Descriptions, Drawer, Popconfirm, Space, Table, Upload, message } from 'antd';
 import type { UploadProps } from 'antd';
+import { useState } from 'react';
 import {
   apiFetch,
   apiUpload,
-  ApiError,
   filePaths,
+  isApiError,
   type FileRow,
   type ListFilesResponse,
   type PresignResponse,
 } from '@ting/api';
-import { signInPath } from '../config/auth';
+import { PageShell } from '../components/PageShell';
+import { QueryErrorAlert } from '../components/QueryErrorAlert';
+import { useApiQuery } from '../hooks/useApiQuery';
+import { useAuthMutation } from '../hooks/useAuthMutation';
 import { handleAuthError } from '../hooks/useSession';
-
-function formatBytes(n: number): string {
-  if (n < 1024) {
-    return `${n} B`;
-  }
-  if (n < 1024 * 1024) {
-    return `${(n / 1024).toFixed(1)} KiB`;
-  }
-  return `${(n / (1024 * 1024)).toFixed(1)} MiB`;
-}
-
-function basename(key: string): string {
-  const parts = key.split('/');
-  return parts[parts.length - 1] || key;
-}
+import { basename, formatBytes, formatDateTime } from '../utils/format';
 
 export function FilesPage() {
   const queryClient = useQueryClient();
+  const [viewing, setViewing] = useState<FileRow | null>(null);
 
-  const filesQuery = useQuery({
+  const filesQuery = useApiQuery({
     queryKey: ['files'],
-    queryFn: () => apiFetch<ListFilesResponse>(filePaths.list),
+    queryFn: () => apiFetch<ListFilesResponse>(filePaths.listQuery(50)),
+    authReturnTo: '/admin/files',
   });
 
-  const uploadMutation = useMutation({
+  const uploadMutation = useAuthMutation('/admin/files', {
     mutationFn: (file: File) => apiUpload(filePaths.list, file),
     onSuccess: () => {
       message.success('上传成功');
       void queryClient.invalidateQueries({ queryKey: ['files'] });
     },
     onError: (err: unknown) => {
-      if (handleAuthError(err)) {
-        return;
-      }
-      const msg = err instanceof ApiError ? err.message : '上传失败';
-      message.error(msg);
+      message.error(isApiError(err) ? err.message : '上传失败');
+    },
+  });
+
+  const deleteMutation = useAuthMutation('/admin/files', {
+    mutationFn: (fileId: string) =>
+      apiFetch(filePaths.item(fileId), { method: 'DELETE' }),
+    onSuccess: () => {
+      message.success('已删除');
+      setViewing(null);
+      void queryClient.invalidateQueries({ queryKey: ['files'] });
+    },
+    onError: (err: unknown) => {
+      message.error(isApiError(err) ? err.message : '删除失败');
     },
   });
 
@@ -56,10 +57,10 @@ export function FilesPage() {
       const presign = await apiFetch<PresignResponse>(filePaths.url(fileId));
       window.open(presign.url, '_blank', 'noopener,noreferrer');
     } catch (err) {
-      if (handleAuthError(err)) {
+      if (handleAuthError(err, '/admin/files')) {
         return;
       }
-      const msg = err instanceof ApiError ? err.message : '获取下载链接失败';
+      const msg = isApiError(err) ? err.message : '获取下载链接失败';
       message.error(msg);
     }
   };
@@ -72,29 +73,21 @@ export function FilesPage() {
     },
   };
 
-  if (filesQuery.isError && handleAuthError(filesQuery.error)) {
+  if (filesQuery.isError && handleAuthError(filesQuery.error, '/admin/files')) {
     return null;
   }
 
-  if (filesQuery.error instanceof ApiError && filesQuery.error.status === 401) {
+  if (filesQuery.isError) {
     return (
-      <Alert
-        type="warning"
-        message="未登录"
-        description={
-          <Button type="link" href={signInPath('/admin/files')}>
-            前往登录
-          </Button>
-        }
-      />
+      <PageShell title="文件">
+        <QueryErrorAlert error={filesQuery.error} returnTo="/admin/files" />
+      </PageShell>
     );
   }
 
   return (
-    <Space direction="vertical" size="large" style={{ width: '100%' }}>
-      <Typography.Title level={3} style={{ margin: 0 }}>
-        文件
-      </Typography.Title>
+    <PageShell title="文件">
+      <Space direction="vertical" size="large" style={{ width: '100%' }}>
 
       <Card title="上传">
         <Upload {...uploadProps}>
@@ -103,54 +96,81 @@ export function FilesPage() {
       </Card>
 
       <Card title="我的文件">
-        {filesQuery.isError && !(filesQuery.error instanceof ApiError && filesQuery.error.status === 401) ? (
-          <Alert
-            type="error"
-            message="加载失败"
-            description={
-              filesQuery.error instanceof ApiError
-                ? filesQuery.error.message
-                : String(filesQuery.error)
-            }
-          />
-        ) : (
-          <Table
-            rowKey="file_id"
-            loading={filesQuery.isLoading}
-            dataSource={filesQuery.data?.files ?? []}
-            pagination={false}
-            columns={[
-              {
-                title: '名称',
-                dataIndex: 'object_key',
-                render: (key: string) => basename(key),
-              },
-              { title: '类型', dataIndex: 'content_type', width: 160 },
-              {
-                title: '大小',
-                dataIndex: 'size_bytes',
-                width: 100,
-                render: (n: number) => formatBytes(n),
-              },
-              {
-                title: '上传时间',
-                dataIndex: 'created_at',
-                width: 200,
-                render: (v: string) => new Date(v).toLocaleString(),
-              },
-              {
-                title: '操作',
-                width: 100,
-                render: (_: unknown, row: FileRow) => (
-                  <Button type="link" onClick={() => void download(row.file_id)}>
+        <Table
+          rowKey="file_id"
+          loading={filesQuery.isLoading}
+          dataSource={filesQuery.data?.files ?? []}
+          pagination={false}
+          columns={[
+            {
+              title: '名称',
+              dataIndex: 'object_key',
+              render: (key: string) => basename(key),
+            },
+            { title: '类型', dataIndex: 'content_type', width: 160 },
+            {
+              title: '大小',
+              dataIndex: 'size_bytes',
+              width: 100,
+              render: (n: number) => formatBytes(n),
+            },
+            {
+              title: '上传时间',
+              dataIndex: 'created_at',
+              width: 200,
+              render: (v: string) => formatDateTime(v),
+            },
+            {
+              title: '操作',
+              width: 180,
+              render: (_: unknown, row: FileRow) => (
+                <Space size="small" onClick={(e) => e.stopPropagation()}>
+                  <Button type="link" size="small" onClick={() => setViewing(row)}>
+                    详情
+                  </Button>
+                  <Button type="link" size="small" onClick={() => void download(row.file_id)}>
                     下载
                   </Button>
-                ),
-              },
-            ]}
-          />
-        )}
+                  <Popconfirm
+                    title="删除此文件？"
+                    onConfirm={() => deleteMutation.mutate(row.file_id)}
+                  >
+                    <Button type="link" size="small" danger loading={deleteMutation.isPending}>
+                      删除
+                    </Button>
+                  </Popconfirm>
+                </Space>
+              ),
+            },
+          ]}
+          onRow={(record) => ({
+            onClick: () => setViewing(record),
+            style: { cursor: 'pointer' },
+          })}
+        />
       </Card>
-    </Space>
+
+      <Drawer
+        title="文件详情"
+        width={520}
+        open={viewing !== null}
+        onClose={() => setViewing(null)}
+      >
+        {viewing ? (
+          <Descriptions column={1} size="small" bordered>
+            <Descriptions.Item label="文件 ID">{viewing.file_id}</Descriptions.Item>
+            <Descriptions.Item label="名称">{basename(viewing.object_key)}</Descriptions.Item>
+            <Descriptions.Item label="对象键">{viewing.object_key}</Descriptions.Item>
+            <Descriptions.Item label="类型">{viewing.content_type}</Descriptions.Item>
+            <Descriptions.Item label="大小">{formatBytes(viewing.size_bytes)}</Descriptions.Item>
+            <Descriptions.Item label="桶">{viewing.bucket}</Descriptions.Item>
+            <Descriptions.Item label="租户">{viewing.tenant_id || '—'}</Descriptions.Item>
+            <Descriptions.Item label="所有者">{viewing.owner_id}</Descriptions.Item>
+            <Descriptions.Item label="上传时间">{formatDateTime(viewing.created_at)}</Descriptions.Item>
+          </Descriptions>
+        ) : null}
+      </Drawer>
+      </Space>
+    </PageShell>
   );
 }

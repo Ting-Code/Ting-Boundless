@@ -25,14 +25,12 @@ func (stubLister) ListByTenant(context.Context, string, int) ([]store.User, erro
 }
 
 func adminHandler() http.Handler {
-	return identity.Middleware(httpx.RequireRole("admin")(list.New(stubLister{})))
+	return httpx.TrustedRole("admin")(list.New(stubLister{}))
 }
 
 func TestHandler_ListRequiresAdmin(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/users/", nil)
-	req = req.WithContext(identity.NewContext(req.Context(), identity.Identity{
-		UserID: "u1", RequestID: "r1",
-	}))
+	identity.Identity{UserID: "u1", RequestID: "r1"}.Inject(req.Header)
 	rr := httptest.NewRecorder()
 	adminHandler().ServeHTTP(rr, req)
 	if rr.Code != http.StatusForbidden {
@@ -42,9 +40,9 @@ func TestHandler_ListRequiresAdmin(t *testing.T) {
 
 func TestHandler_ListOK(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/users/", nil)
-	req = req.WithContext(identity.NewContext(req.Context(), identity.Identity{
+	identity.Identity{
 		UserID: "u1", TenantID: "t1", Roles: []string{"admin"}, RequestID: "r1",
-	}))
+	}.Inject(req.Header)
 	rr := httptest.NewRecorder()
 	adminHandler().ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "Alice") {

@@ -43,11 +43,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
-	id, ok := identity.FromContext(r.Context())
-	if !ok || id.UserID == "" {
-		httpx.WriteError(w, id.RequestID, errs.Unauthorized("unauthenticated", "authentication required"))
-		return
-	}
+	id, _ := identity.FromContext(r.Context())
 	if h.users == nil {
 		httpx.WriteError(w, id.RequestID, errs.Internal("database_unavailable", "database not connected"))
 		return
@@ -62,11 +58,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) patch(w http.ResponseWriter, r *http.Request) {
-	id, ok := identity.FromContext(r.Context())
-	if !ok || id.UserID == "" {
-		httpx.WriteError(w, id.RequestID, errs.Unauthorized("unauthenticated", "authentication required"))
-		return
-	}
+	id, _ := identity.FromContext(r.Context())
 	if h.users == nil {
 		httpx.WriteError(w, id.RequestID, errs.Internal("database_unavailable", "database not connected"))
 		return

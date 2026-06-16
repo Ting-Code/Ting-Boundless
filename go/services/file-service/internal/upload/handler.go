@@ -61,11 +61,7 @@ func New(cfg Config) http.Handler {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	id, ok := identity.FromContext(r.Context())
-	if !ok || id.UserID == "" {
-		httpx.WriteError(w, id.RequestID, errs.Unauthorized("auth.unauthenticated", "authentication required"))
-		return
-	}
+	id, _ := identity.FromContext(r.Context())
 	if h.files == nil {
 		httpx.WriteError(w, id.RequestID, errs.Internal("database_unavailable", "database not connected"))
 		return

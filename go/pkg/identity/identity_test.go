@@ -39,17 +39,10 @@ func TestStripUntrustedAndInjectRoundTrip(t *testing.T) {
 }
 
 func TestAuthenticated(t *testing.T) {
-	if !identity.Identity{UserID: "u1"}.Authenticated() {
+	if !(identity.Identity{UserID: "u1"}).Authenticated() {
 		t.Fatal("expected authenticated")
 	}
-	if identity.Identity{}.Authenticated() {
+	if (identity.Identity{}).Authenticated() {
 		t.Fatal("expected anonymous")
-	}
-}
-
-func TestHasRole(t *testing.T) {
-	id := identity.Identity{Roles: []string{"user", "admin"}}
-	if !identity.HasRole(id, "admin") {
-		t.Fatal("expected admin role")
 	}
 }
